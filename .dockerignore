@@ -1,0 +1,11 @@
+.git
+.scratch
+.env
+**/.vite
+**/dist
+**/node_modules
+data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+npm-debug.log*

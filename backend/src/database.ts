@@ -102,6 +102,53 @@ const migrationTwo = `
     ON recommendation_sets(service_date, id);
 `;
 
+const migrationThree = `
+  CREATE TABLE custom_sources (
+    id INTEGER PRIMARY KEY,
+    url TEXT NOT NULL UNIQUE,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE custom_source_runs (
+    id INTEGER PRIMARY KEY,
+    custom_source_id INTEGER NOT NULL REFERENCES custom_sources(id),
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    outcome TEXT NOT NULL,
+    http_status INTEGER,
+    error_message TEXT,
+    source_text TEXT,
+    content_hash TEXT,
+    extracted_json TEXT,
+    model TEXT,
+    prompt_version TEXT,
+    provider_response_id TEXT,
+    input_tokens INTEGER,
+    output_tokens INTEGER
+  );
+
+  ALTER TABLE restaurants
+    ADD COLUMN custom_source_id INTEGER REFERENCES custom_sources(id);
+  ALTER TABLE source_fetches
+    ADD COLUMN custom_source_id INTEGER REFERENCES custom_sources(id);
+  ALTER TABLE source_fetches
+    ADD COLUMN custom_run_id INTEGER REFERENCES custom_source_runs(id);
+  ALTER TABLE offering_revisions ADD COLUMN price_text TEXT;
+
+  CREATE UNIQUE INDEX restaurants_by_custom_source
+    ON restaurants(custom_source_id)
+    WHERE custom_source_id IS NOT NULL;
+  CREATE INDEX source_fetches_by_date_source
+    ON source_fetches(service_date, custom_source_id, id);
+  CREATE INDEX custom_source_runs_by_source
+    ON custom_source_runs(custom_source_id, id);
+`;
+
+const migrationFour = `
+  ALTER TABLE assessments ADD COLUMN structured_menu_json TEXT;
+`;
+
 export function openDatabase(path: string): Database.Database {
   const db = new Database(path);
   db.pragma("foreign_keys = ON");
@@ -120,6 +167,20 @@ export function openDatabase(path: string): Database.Database {
     db.transaction(() => {
       db.exec(migrationTwo);
       db.pragma("user_version = 2");
+    })();
+    version = 2;
+  }
+  if (version < 3) {
+    db.transaction(() => {
+      db.exec(migrationThree);
+      db.pragma("user_version = 3");
+    })();
+    version = 3;
+  }
+  if (version < 4) {
+    db.transaction(() => {
+      db.exec(migrationFour);
+      db.pragma("user_version = 4");
     })();
   }
 

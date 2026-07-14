@@ -4,6 +4,29 @@ import type Database from "better-sqlite3";
 import { z } from "zod";
 
 const scoreSchema = z.number().min(0).max(10);
+export const structuredMenuSchema = z.object({
+  courses: z.array(
+    z.object({
+      category: z.enum([
+        "unknown",
+        "starter",
+        "soup",
+        "main",
+        "side",
+        "salad",
+        "dessert",
+        "bread",
+        "drink",
+        "other",
+      ]),
+      dietaryMarkers: z.array(z.string().trim().min(1).max(24)).max(6),
+      explicitAllergens: z.array(z.string().trim().min(1).max(40)).max(16),
+      nameFi: z.string().trim().min(2).max(120),
+    }),
+  ).max(32),
+});
+export type StructuredMenu = z.infer<typeof structuredMenuSchema>;
+
 export const assessmentSchema = z.object({
   rationaleFi: z.string().trim().min(5).max(180),
   revisionId: z.number().int().positive(),
@@ -13,11 +36,13 @@ export const assessmentSchema = z.object({
     value: scoreSchema,
     variety: scoreSchema,
   }),
+  structuredMenu: structuredMenuSchema,
 });
 
 export interface AssessmentOffering {
   lunchHours: string | null;
   menuText: string;
+  priceText: string | null;
   restaurantId: string;
   restaurantName: string;
   revisionId: number;
@@ -71,15 +96,16 @@ export interface RecommendationResult {
 export const defaultRecommendationVersions: RecommendationVersions = {
   model: "gpt-5.4-nano",
   profileVersion: "shared-v1",
-  promptVersion: "v1",
+  promptVersion: "v4",
   rankingVersion: "weighted-v1",
   rubricVersion: "v1",
-  schemaVersion: "v1",
+  schemaVersion: "v3",
 };
 
 interface CandidateRow {
   lunch_hours: string | null;
   menu_text: string;
+  price_text: string | null;
   restaurant_id: string;
   restaurant_name: string;
   revision_id: number;
@@ -119,21 +145,28 @@ function latestPublishedOfferings(
 ): CandidateRow[] {
   return db
     .prepare(
-      `WITH latest_fetch AS (
-        SELECT id
-        FROM source_fetches
-        WHERE service_date = ? AND outcome = 'success'
-        ORDER BY id DESC
-        LIMIT 1
+      `WITH active_sources(custom_source_id) AS (
+        SELECT NULL
+        UNION ALL
+        SELECT id FROM custom_sources WHERE enabled = 1
+      ), latest_fetches AS (
+        SELECT (
+          SELECT fetch.id FROM source_fetches fetch
+          WHERE fetch.service_date = ? AND fetch.outcome = 'success'
+            AND fetch.custom_source_id IS active_sources.custom_source_id
+          ORDER BY fetch.id DESC LIMIT 1
+        ) AS id
+        FROM active_sources
       )
       SELECT
         revision.id AS revision_id,
         restaurant.id AS restaurant_id,
         restaurant.name AS restaurant_name,
         revision.menu_text,
-        revision.lunch_hours
-      FROM latest_fetch
-      JOIN fetch_observations observation ON observation.fetch_id = latest_fetch.id
+        revision.lunch_hours,
+        revision.price_text
+      FROM latest_fetches
+      JOIN fetch_observations observation ON observation.fetch_id = latest_fetches.id
       JOIN offering_revisions revision ON revision.id = observation.revision_id
       JOIN restaurants restaurant ON restaurant.id = observation.restaurant_id
       WHERE revision.availability = 'published' AND revision.menu_text IS NOT NULL
@@ -205,58 +238,55 @@ export async function assessAndRankDay(
   let createdAssessmentCount = 0;
 
   if (unseen.length > 0) {
-    const rawOutput = await options.assessor({
-      offerings: unseen.map((offering) => ({
-        lunchHours: offering.lunch_hours,
-        menuText: offering.menu_text,
-        restaurantId: offering.restaurant_id,
-        restaurantName: offering.restaurant_name,
-        revisionId: offering.revision_id,
-      })),
-      serviceDate: options.serviceDate,
-    });
-    const envelope =
-      typeof rawOutput === "object" && rawOutput !== null && "assessments" in rawOutput
-        ? (rawOutput as AssessorEnvelope)
-        : null;
-    const output = z.array(assessmentSchema).parse(envelope?.assessments ?? rawOutput);
-    const expectedIds = new Set(unseen.map((offering) => offering.revision_id));
-    const actualIds = new Set(output.map((assessment) => assessment.revisionId));
-    if (
-      output.length !== unseen.length ||
-      actualIds.size !== output.length ||
-      [...expectedIds].some((id) => !actualIds.has(id))
-    ) {
-      throw new Error("Assessor output does not match requested revisions");
-    }
-
     const insert = options.db.prepare(`
       INSERT INTO assessments (
         revision_id, profile_version, rubric_version, prompt_version,
         schema_version, model, scores_json, total_score, rationale_fi,
-        provider_response_id, input_tokens, output_tokens, assessed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        structured_menu_json, provider_response_id, input_tokens, output_tokens,
+        assessed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    options.db.transaction(() => {
-      for (const assessment of output) {
-        insert.run(
-          assessment.revisionId,
-          versions.profileVersion,
-          versions.rubricVersion,
-          versions.promptVersion,
-          versions.schemaVersion,
-          versions.model,
-          JSON.stringify(assessment.scores),
-          totalScore(assessment.scores),
-          assessment.rationaleFi,
-          envelope?.providerResponseId ?? null,
-          envelope?.inputTokens ?? null,
-          envelope?.outputTokens ?? null,
-          now().toISOString(),
-        );
-        createdAssessmentCount += 1;
+    for (const offering of unseen) {
+      const rawOutput = await options.assessor({
+        offerings: [
+          {
+            lunchHours: offering.lunch_hours,
+            menuText: offering.menu_text,
+            priceText: offering.price_text,
+            restaurantId: offering.restaurant_id,
+            restaurantName: offering.restaurant_name,
+            revisionId: offering.revision_id,
+          },
+        ],
+        serviceDate: options.serviceDate,
+      });
+      const envelope =
+        typeof rawOutput === "object" && rawOutput !== null && "assessments" in rawOutput
+          ? (rawOutput as AssessorEnvelope)
+          : null;
+      const output = z.array(assessmentSchema).length(1).parse(envelope?.assessments ?? rawOutput);
+      const assessment = output[0]!;
+      if (assessment.revisionId !== offering.revision_id) {
+        throw new Error("Assessor output does not match requested revision");
       }
-    })();
+      insert.run(
+        assessment.revisionId,
+        versions.profileVersion,
+        versions.rubricVersion,
+        versions.promptVersion,
+        versions.schemaVersion,
+        versions.model,
+        JSON.stringify(assessment.scores),
+        totalScore(assessment.scores),
+        assessment.rationaleFi,
+        JSON.stringify(assessment.structuredMenu),
+        envelope?.providerResponseId ?? null,
+        envelope?.inputTokens ?? null,
+        envelope?.outputTokens ?? null,
+        now().toISOString(),
+      );
+      createdAssessmentCount += 1;
+    }
   }
 
   const assessed = unseen.length > 0 ? findAssessments(options.db, offerings, versions) : existing;

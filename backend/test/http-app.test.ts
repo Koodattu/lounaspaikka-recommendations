@@ -72,6 +72,14 @@ describe("reader API", () => {
             value: 10 - index,
             variety: 10 - index,
           },
+          structuredMenu: {
+            courses: [{
+              category: "main" as const,
+              dietaryMarkers: ["G"],
+              explicitAllergens: [],
+              nameFi: offering.menuText.split("\n")[0]!,
+            }],
+          },
         })),
       db,
       now: () => new Date("2026-07-14T03:11:00.000Z"),
@@ -98,6 +106,11 @@ describe("reader API", () => {
     });
     expect(dayBody.recommendations).toHaveLength(3);
     expect(dayBody.recommendations[0]).toMatchObject({
+      menu: {
+        structuredMenu: {
+          courses: [expect.objectContaining({ nameFi: "Kasviscurry" })],
+        },
+      },
       rank: 1,
       rationale: "A-ravintola tarjoaa päivän kiinnostavimman annoksen.",
       restaurant: { id: "a", name: "A-ravintola" },
@@ -105,6 +118,14 @@ describe("reader API", () => {
     });
     expect(dayBody.menus).toHaveLength(4);
     expect(dayBody.menus[1].menu.text).toBe("Paahdettua kuhaa\n13,50 €");
+    expect(dayBody.menus[1].menu.structuredMenu).toEqual({
+      courses: [{
+        category: "main",
+        dietaryMarkers: ["G"],
+        explicitAllergens: [],
+        nameFi: "Paahdettua kuhaa",
+      }],
+    });
 
     const week = await app.inject({
       method: "GET",
@@ -125,6 +146,9 @@ describe("reader API", () => {
     expect(week.json().days[1]).toMatchObject({
       serviceDate: "2026-07-14",
       status: "published",
+      structuredMenu: {
+        courses: [expect.objectContaining({ nameFi: "Kasviscurry" })],
+      },
       text: "Kasviscurry",
     });
   });

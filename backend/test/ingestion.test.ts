@@ -181,6 +181,23 @@ describe("lunch ingestion", () => {
     expect(getDayMenus(db, "2026-07-14")[0]?.menu.text).toContain("Mustajuurikeitto");
   });
 
+  it("creates a new assessment input revision when the restaurant name changes", async () => {
+    let currentRestaurant = restaurant;
+    const source = createLounaspaikkaClient({
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ items: [currentRestaurant] }), { status: 200 }),
+    });
+    db = openDatabase(":memory:");
+
+    await ingestLunchDay({ db, serviceDate: "2026-07-14", source });
+    currentRestaurant = { ...restaurant, name: "Vinola Keskusta" };
+    const renamed = await ingestLunchDay({ db, serviceDate: "2026-07-14", source });
+
+    expect(renamed.createdRevisionCount).toBe(1);
+    expect(getOfferingHistory(db, "1342653", "2026-07-14")).toHaveLength(2);
+    expect(getDayMenus(db, "2026-07-14")[0]?.restaurant.name).toBe("Vinola Keskusta");
+  });
+
   it("treats missing coordinates as missing and rejects unsafe upstream URLs", async () => {
     const source = createLounaspaikkaClient({
       fetchImpl: async () =>

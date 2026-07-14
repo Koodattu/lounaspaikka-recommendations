@@ -36,7 +36,9 @@ describe("scheduled refresh", () => {
       .mockRejectedValueOnce(new Error("source unavailable"))
       .mockResolvedValue(undefined);
     const onError = vi.fn();
+    const afterDates = vi.fn().mockResolvedValue(undefined);
     const coordinator = createRefreshCoordinator({
+      afterDates,
       now: () => new Date("2026-07-17T01:15:00.000Z"),
       onError,
       runDate,
@@ -46,6 +48,11 @@ describe("scheduled refresh", () => {
     const overlappingRun = coordinator.run();
     expect(overlappingRun).toBe(firstRun);
     expect(runDate).toHaveBeenCalledTimes(1);
+    expect(coordinator.getStatus()).toMatchObject({
+      currentTarget: "2026-07-17",
+      running: true,
+      startedAt: "2026-07-17T01:15:00.000Z",
+    });
 
     releaseFirst?.();
     await firstRun;
@@ -56,5 +63,19 @@ describe("scheduled refresh", () => {
       "2026-07-19",
     ]);
     expect(onError).toHaveBeenCalledWith("2026-07-18", expect.any(Error));
+    expect(afterDates).toHaveBeenCalledWith([
+      "2026-07-17",
+      "2026-07-18",
+      "2026-07-19",
+    ]);
+    expect(coordinator.getStatus()).toMatchObject({
+      currentTarget: null,
+      lastError: {
+        message: "source unavailable",
+        target: "2026-07-18",
+      },
+      lastFinishedAt: "2026-07-17T01:15:00.000Z",
+      running: false,
+    });
   });
 });

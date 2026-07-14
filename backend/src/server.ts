@@ -1,12 +1,19 @@
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { createCustomSourceService } from "./custom-sources.js";
 import { openDatabase } from "./database.js";
 import { createServer } from "./http-app.js";
 import { ingestLunchDay } from "./ingestion.js";
 import { createOpenAiAssessor } from "./openai-assessor.js";
+import { createOpenAiMenuExtractor } from "./openai-menu-extractor.js";
+import { createMenuPageFetcher } from "./page-fetcher.js";
 import { assessAndRankDay } from "./recommendations.js";
-import { createRefreshCoordinator, startRefreshSchedule } from "./refresh.js";
+import {
+  createRefreshCoordinator,
+  datesToRefresh,
+  startRefreshSchedule,
+} from "./refresh.js";
 import { createLounaspaikkaClient } from "./source.js";
 
 async function start(): Promise<void> {
@@ -23,29 +30,77 @@ async function start(): Promise<void> {
   const assessor = process.env.OPENAI_API_KEY
     ? createOpenAiAssessor({ apiKey: process.env.OPENAI_API_KEY, model })
     : null;
-  const app = createServer({ db, recommendationVersions: { model } });
+  const customSourceService = process.env.OPENAI_API_KEY
+    ? createCustomSourceService({
+        db,
+        extractor: createOpenAiMenuExtractor({ apiKey: process.env.OPENAI_API_KEY, model }),
+        fetchPage: createMenuPageFetcher(),
+        model,
+      })
+    : null;
   const coordinator = createRefreshCoordinator({
+    async afterDates(serviceDates) {
+      await customSourceService?.crawlAll(serviceDates);
+      if (!assessor) return;
+      let firstError: unknown;
+      for (const serviceDate of serviceDates) {
+        try {
+          const recommendations = await assessAndRankDay({
+            assessor,
+            db,
+            serviceDate,
+            versions: { model },
+          });
+          console.info(
+            `[recommendations] ${serviceDate}: ${recommendations.createdAssessmentCount} assessed`,
+          );
+        } catch (error) {
+          firstError ??= error;
+          const message = error instanceof Error ? error.message : "Unknown recommendation error";
+          console.error(`[recommendations] ${serviceDate} failed: ${message}`);
+        }
+      }
+      if (firstError) throw firstError;
+    },
     async runDate(serviceDate) {
       const result = await ingestLunchDay({ db, serviceDate, source });
       console.info(
         `[refresh] ${serviceDate}: ${result.itemCount} restaurants, ${result.createdRevisionCount} changed`,
       );
-      if (assessor) {
-        const recommendations = await assessAndRankDay({
-          assessor,
-          db,
-          serviceDate,
-          versions: { model },
-        });
-        console.info(
-          `[recommendations] ${serviceDate}: ${recommendations.createdAssessmentCount} assessed`,
-        );
-      }
     },
     onError(serviceDate, error) {
       const message = error instanceof Error ? error.message : "Unknown refresh error";
       console.error(`[refresh] ${serviceDate} failed: ${message}`);
     },
+  });
+  const app = createServer({
+    addCustomSource: customSourceService
+      ? async (url) => {
+          const serviceDates = datesToRefresh(new Date());
+          const result = await customSourceService.addAndCrawl(url, serviceDates);
+          if (assessor) {
+            for (const serviceDate of serviceDates) {
+              try {
+                await assessAndRankDay({
+                  assessor,
+                  db,
+                  serviceDate,
+                  versions: { model },
+                });
+              } catch (error) {
+                const message = error instanceof Error ? error.message : "Unknown recommendation error";
+                console.error(`[recommendations] ${serviceDate} failed after source add: ${message}`);
+              }
+            }
+          }
+          return result;
+        }
+      : undefined,
+    adminPassword: process.env.ADMIN_PASSWORD,
+    db,
+    openAiConfigured: Boolean(process.env.OPENAI_API_KEY),
+    recommendationVersions: { model },
+    refreshStatus: coordinator.getStatus,
   });
   const schedule = startRefreshSchedule(coordinator.run);
   let shuttingDown = false;

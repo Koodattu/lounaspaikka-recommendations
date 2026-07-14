@@ -1,5 +1,6 @@
 {$SITE_ADDRESS:http://localhost} {
   encode zstd gzip
+  header /admin* X-Robots-Tag "noindex, nofollow, noarchive"
 
   handle /api/* {
     reverse_proxy backend:3000

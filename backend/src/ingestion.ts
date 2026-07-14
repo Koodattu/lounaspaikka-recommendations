@@ -1,9 +1,14 @@
-import { createHash } from "node:crypto";
-
 import type Database from "better-sqlite3";
 
 import { parseIsoDate } from "./dates.js";
 import { htmlToText, normalizeLunchHours } from "./html.js";
+import {
+  persistFailedFetch,
+  persistSuccessfulFetch,
+  sha256,
+  type PersistResult,
+  type StoredOffering,
+} from "./offering-store.js";
 import { SourceFetchError, type LunchSource, type SourceFetchResult } from "./source.js";
 
 interface IngestLunchDayOptions {
@@ -13,62 +18,7 @@ interface IngestLunchDayOptions {
   source: LunchSource;
 }
 
-export interface IngestResult {
-  createdRevisionCount: number;
-  itemCount: number;
-  outcome: "success";
-}
-
-function persistFailure(
-  db: Database.Database,
-  error: unknown,
-  sourceResult: SourceFetchResult | undefined,
-  serviceDate: string,
-  startedAt: string,
-  finishedAt: string,
-): void {
-  const sourceError = error instanceof SourceFetchError ? error : null;
-  const outcome = sourceError?.outcome ?? (sourceResult ? "invalid_response" : "network_error");
-  const pages = sourceError?.pages ?? sourceResult?.pages ?? null;
-  const request = sourceError?.request ?? sourceResult?.request ?? { serviceDate };
-
-  db.prepare(
-    `INSERT INTO source_fetches (
-      service_date, started_at, finished_at, outcome, http_status, error_message,
-      request_json, response_pages_json, response_hash, item_count
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    serviceDate,
-    startedAt,
-    finishedAt,
-    outcome,
-    sourceError?.httpStatus ?? null,
-    error instanceof Error ? error.message : "Unknown source error",
-    JSON.stringify(request),
-    pages ? JSON.stringify(pages) : null,
-    pages ? hash(pages.map((page) => page.body)) : null,
-    sourceResult?.items.length ?? null,
-  );
-}
-
-interface ParsedRestaurant {
-  address: string | null;
-  availability: "not_published" | "published";
-  city: string | null;
-  descriptionText: string | null;
-  id: string;
-  latitude: number | null;
-  longitude: number | null;
-  lunchHours: string | null;
-  menuText: string | null;
-  menuTitle: string | null;
-  name: string;
-  openingHours: unknown;
-  phone: string | null;
-  photoUrl: string | null;
-  snapshot: unknown;
-  websiteUrl: string | null;
-}
+export type IngestResult = PersistResult;
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
@@ -117,7 +67,7 @@ function fallbackLunchHours(item: Record<string, unknown>, serviceDate: string):
   return periods.length > 0 ? periods.join(", ") : null;
 }
 
-function parseRestaurant(value: unknown, serviceDate: string): ParsedRestaurant {
+function parseRestaurant(value: unknown, serviceDate: string): StoredOffering {
   const item = record(value);
   const id = optionalString(item?.id);
   const name = optionalString(item?.name);
@@ -137,6 +87,7 @@ function parseRestaurant(value: unknown, serviceDate: string): ParsedRestaurant 
     address: optionalString(item.address),
     availability: menuText ? "published" : "not_published",
     city: optionalString(item.city),
+    customSourceId: null,
     descriptionText: optionalString(item.desc) ? htmlToText(String(item.desc)) : null,
     id,
     latitude: optionalNumber(marker?.latitude),
@@ -150,124 +101,37 @@ function parseRestaurant(value: unknown, serviceDate: string): ParsedRestaurant 
     openingHours: item.openingHours ?? [],
     phone: optionalString(item.tel),
     photoUrl: optionalHttpUrl(item.photo),
+    priceText: null,
     snapshot: { dailyAd, restaurant: item },
     websiteUrl: optionalHttpUrl(item.www),
   };
 }
 
-function hash(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-function persistSuccess(
+function recordFailure(
   db: Database.Database,
-  sourceResult: SourceFetchResult,
-  restaurants: ParsedRestaurant[],
+  error: unknown,
+  sourceResult: SourceFetchResult | undefined,
   serviceDate: string,
   startedAt: string,
   finishedAt: string,
-): IngestResult {
-  return db.transaction(() => {
-    const fetchInsert = db
-      .prepare(
-        `INSERT INTO source_fetches (
-          service_date, started_at, finished_at, outcome, request_json,
-          response_pages_json, response_hash, item_count
-        ) VALUES (?, ?, ?, 'success', ?, ?, ?, ?)`,
-      )
-      .run(
-        serviceDate,
-        startedAt,
-        finishedAt,
-        JSON.stringify(sourceResult.request),
-        JSON.stringify(sourceResult.pages),
-        hash(sourceResult.pages.map((page) => page.body)),
-        restaurants.length,
-      );
-    const fetchId = Number(fetchInsert.lastInsertRowid);
-    let createdRevisionCount = 0;
+): void {
+  const sourceError = error instanceof SourceFetchError ? error : null;
+  const outcome = sourceError?.outcome ?? (sourceResult ? "invalid_response" : "network_error");
+  const pages = sourceError?.pages ?? sourceResult?.pages ?? null;
+  const request = sourceError?.request ?? sourceResult?.request ?? { serviceDate };
 
-    const upsertRestaurant = db.prepare(`
-      INSERT INTO restaurants (
-        id, name, address, city, latitude, longitude, website_url, phone,
-        photo_url, description_text, opening_hours_json, first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        name = excluded.name,
-        address = excluded.address,
-        city = excluded.city,
-        latitude = excluded.latitude,
-        longitude = excluded.longitude,
-        website_url = excluded.website_url,
-        phone = excluded.phone,
-        photo_url = excluded.photo_url,
-        description_text = excluded.description_text,
-        opening_hours_json = excluded.opening_hours_json,
-        last_seen_at = excluded.last_seen_at
-    `);
-    const insertRevision = db.prepare(`
-      INSERT OR IGNORE INTO offering_revisions (
-        restaurant_id, service_date, content_hash, availability, menu_title,
-        menu_text, lunch_hours, source_snapshot_json, first_seen_fetch_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const findRevision = db.prepare(`
-      SELECT id FROM offering_revisions
-      WHERE restaurant_id = ? AND service_date = ? AND content_hash = ?
-    `);
-    const insertObservation = db.prepare(`
-      INSERT INTO fetch_observations (fetch_id, restaurant_id, revision_id)
-      VALUES (?, ?, ?)
-    `);
-
-    for (const restaurant of restaurants) {
-      upsertRestaurant.run(
-        restaurant.id,
-        restaurant.name,
-        restaurant.address,
-        restaurant.city,
-        restaurant.latitude,
-        restaurant.longitude,
-        restaurant.websiteUrl,
-        restaurant.phone,
-        restaurant.photoUrl,
-        restaurant.descriptionText,
-        JSON.stringify(restaurant.openingHours),
-        finishedAt,
-        finishedAt,
-      );
-      const contentHash = hash({
-        availability: restaurant.availability,
-        lunchHours: restaurant.lunchHours,
-        menuText: restaurant.menuText,
-        menuTitle: restaurant.menuTitle,
-      });
-      const insertion = insertRevision.run(
-        restaurant.id,
-        serviceDate,
-        contentHash,
-        restaurant.availability,
-        restaurant.menuTitle,
-        restaurant.menuText,
-        restaurant.lunchHours,
-        JSON.stringify(restaurant.snapshot),
-        fetchId,
-        finishedAt,
-      );
-      createdRevisionCount += insertion.changes;
-      const revision = findRevision.get(restaurant.id, serviceDate, contentHash) as
-        | { id: number }
-        | undefined;
-      if (!revision) throw new Error("Offering revision was not persisted");
-      insertObservation.run(fetchId, restaurant.id, revision.id);
-    }
-
-    return {
-      createdRevisionCount,
-      itemCount: restaurants.length,
-      outcome: "success" as const,
-    };
-  })();
+  persistFailedFetch({
+    db,
+    errorMessage: error instanceof Error ? error.message : "Unknown source error",
+    finishedAt,
+    httpStatus: sourceError?.httpStatus ?? null,
+    outcome,
+    request,
+    responseHash: pages ? sha256(pages.map((page) => page.body)) : null,
+    responsePages: pages,
+    serviceDate,
+    startedAt,
+  });
 }
 
 export async function ingestLunchDay(options: IngestLunchDayOptions): Promise<IngestResult> {
@@ -276,18 +140,23 @@ export async function ingestLunchDay(options: IngestLunchDayOptions): Promise<In
   let sourceResult: SourceFetchResult | undefined;
   try {
     sourceResult = await options.source.fetchLunchDay(options.serviceDate);
-    const restaurants = sourceResult.items.map((item) => parseRestaurant(item, options.serviceDate));
-    const finishedAt = now().toISOString();
-    return persistSuccess(
-      options.db,
-      sourceResult,
-      restaurants,
-      options.serviceDate,
-      startedAt,
-      finishedAt,
+    const offerings = sourceResult.items.map((item) =>
+      parseRestaurant(item, options.serviceDate),
     );
+    const finishedAt = now().toISOString();
+    return persistSuccessfulFetch({
+      db: options.db,
+      finishedAt,
+      httpStatus: sourceResult.pages.at(-1)?.status ?? null,
+      offerings,
+      request: sourceResult.request,
+      responseHash: sha256(sourceResult.pages.map((page) => page.body)),
+      responsePages: sourceResult.pages,
+      serviceDate: options.serviceDate,
+      startedAt,
+    });
   } catch (error) {
-    persistFailure(
+    recordFailure(
       options.db,
       error,
       sourceResult,

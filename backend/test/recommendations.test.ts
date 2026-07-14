@@ -3,7 +3,7 @@ import type Database from "better-sqlite3";
 
 import { openDatabase } from "../src/database.js";
 import { ingestLunchDay } from "../src/ingestion.js";
-import { assessAndRankDay } from "../src/recommendations.js";
+import { assessAndRankDay, structuredMenuSchema } from "../src/recommendations.js";
 import type { LunchSource } from "../src/source.js";
 
 function sourceItem(id: string, name: string, menu: string) {
@@ -62,6 +62,14 @@ describe("daily recommendations", () => {
             value: score,
             variety: score,
           },
+          structuredMenu: {
+            courses: [{
+              category: "main" as const,
+              dietaryMarkers: [],
+              explicitAllergens: [],
+              nameFi: offering.restaurantId === "b" ? "Paahdettua kuhaa" : "Päivän lounas",
+            }],
+          },
         };
       }),
     );
@@ -74,11 +82,27 @@ describe("daily recommendations", () => {
       serviceDate: "2026-07-14",
     });
 
-    expect(assessor).toHaveBeenCalledTimes(1);
-    expect(assessor.mock.calls[0]?.[0].offerings).toHaveLength(4);
+    expect(assessor).toHaveBeenCalledTimes(4);
+    expect(assessor.mock.calls.every(([request]) => request.offerings.length === 1)).toBe(true);
     expect(first.createdAssessmentCount).toBe(4);
     expect(first.recommendations.map(({ restaurantId }) => restaurantId)).toEqual(["b", "a", "c"]);
     expect(first.recommendations.map(({ rank }) => rank)).toEqual([1, 2, 3]);
+    const storedMenu = db.prepare(
+      `SELECT assessment.structured_menu_json AS structuredMenuJson, revision.menu_text AS menuText
+       FROM assessments assessment
+       JOIN offering_revisions revision ON revision.id = assessment.revision_id
+       WHERE revision.restaurant_id = 'b' AND assessment.prompt_version = 'v4'
+         AND assessment.schema_version = 'v3'`,
+    ).get() as { menuText: string; structuredMenuJson: string };
+    expect(storedMenu.menuText).toBe("Paahdettua kuhaa");
+    expect(JSON.parse(storedMenu.structuredMenuJson)).toEqual({
+      courses: [{
+        category: "main",
+        dietaryMarkers: [],
+        explicitAllergens: [],
+        nameFi: "Paahdettua kuhaa",
+      }],
+    });
 
     const repeated = await assessAndRankDay({
       assessor,
@@ -86,7 +110,7 @@ describe("daily recommendations", () => {
       serviceDate: "2026-07-14",
     });
 
-    expect(assessor).toHaveBeenCalledTimes(1);
+    expect(assessor).toHaveBeenCalledTimes(4);
     expect(repeated.recommendationSetId).toBe(first.recommendationSetId);
     expect(repeated.reusedRecommendationSet).toBe(true);
 
@@ -103,8 +127,8 @@ describe("daily recommendations", () => {
       serviceDate: "2026-07-14",
     });
 
-    expect(assessor).toHaveBeenCalledTimes(2);
-    expect(assessor.mock.calls[1]?.[0].offerings).toHaveLength(1);
+    expect(assessor).toHaveBeenCalledTimes(5);
+    expect(assessor.mock.calls[4]?.[0].offerings).toHaveLength(1);
     expect(changed.createdAssessmentCount).toBe(1);
     expect(changed.recommendations.map(({ restaurantId }) => restaurantId)).toEqual(["d", "b", "a"]);
   });
@@ -135,6 +159,7 @@ describe("daily recommendations", () => {
             rationaleFi: "Kiinnostava päivän lounas.",
             revisionId: offering.revisionId,
             scores: { appeal: 8, distinctiveness: 8, value: 8, variety: 8 },
+            structuredMenu: { courses: [] },
           })),
         db,
         serviceDate: "2026-07-14",
@@ -145,5 +170,23 @@ describe("daily recommendations", () => {
       count: number;
     };
     expect(count.count).toBe(0);
+  });
+});
+
+describe("structured menu schema", () => {
+  it("allows an unknown category and a complete explicit allergen declaration", () => {
+    const course = {
+      category: "unknown",
+      dietaryMarkers: [],
+      explicitAllergens: Array.from({ length: 16 }, (_, index) => `allergeeni-${index + 1}`),
+      nameFi: "Päivän annos",
+    };
+
+    expect(structuredMenuSchema.safeParse({ courses: [course] }).success).toBe(true);
+    expect(
+      structuredMenuSchema.safeParse({
+        courses: [{ ...course, explicitAllergens: [...course.explicitAllergens, "liikaa"] }],
+      }).success,
+    ).toBe(false);
   });
 });

@@ -18,7 +18,23 @@ const restaurant = {
 const menu = {
   lunchHours: "10.30–14",
   status: "published",
-  text: "Paahdettua kuhaa\nSitruunaperunoita",
+  structuredMenu: {
+    courses: [
+      {
+        category: "main",
+        dietaryMarkers: ["G"],
+        explicitAllergens: ["kala"],
+        nameFi: "Paahdettua kuhaa",
+      },
+      {
+        category: "side",
+        dietaryMarkers: [],
+        explicitAllergens: [],
+        nameFi: "Sitruunaperunoita",
+      },
+    ],
+  },
+  text: "Paahdettua kuhaa (G)\nAllergeenit: kala\nSitruunaperunoita",
   title: "Lounas 14.7.",
 };
 
@@ -30,7 +46,7 @@ const dayResponse = {
     { fetchedAt: "2026-07-14T03:10:00.000Z", menu, restaurant },
     {
       fetchedAt: "2026-07-14T03:10:00.000Z",
-      menu: { ...menu, text: "Kasviscurry" },
+      menu: { ...menu, structuredMenu: null, text: "Kasviscurry" },
       restaurant: { ...restaurant, id: "kasvis", name: "Kasvisravintola" },
     },
   ],
@@ -43,14 +59,14 @@ const dayResponse = {
       score: 9.2,
     },
     {
-      menu: { ...menu, text: "Kasviscurry" },
+      menu: { ...menu, structuredMenu: null, text: "Kasviscurry" },
       rank: 2,
       rationale: "Monipuolinen kasvislounas erottuu edukseen.",
       restaurant: { ...restaurant, id: "kasvis", name: "Kasvisravintola" },
       score: 8.4,
     },
     {
-      menu: { ...menu, text: "Lohikeitto" },
+      menu: { ...menu, structuredMenu: null, text: "Lohikeitto" },
       rank: 3,
       rationale: "Hyvä hinta ja huolella kuvattu klassikko.",
       restaurant: { ...restaurant, id: "keitto", name: "Keittola" },
@@ -81,6 +97,15 @@ describe("reader app", () => {
     expect(screen.getByText("9,2")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Kaikki päivän ruokalistat" })).toBeTruthy();
     expect(screen.getByText("Kuha ja raikas lisuke tekevät tästä päivän kiinnostavimman lounaan.")).toBeTruthy();
+    expect(screen.getAllByText("Paahdettua kuhaa").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Sitruunaperunoita").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Ilmoitetut allergeenit: kala").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Alkuperäinen ruokalistateksti").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Kasviscurry").length).toBeGreaterThan(0);
+    const dataNotice = screen.getByText(/Ruokavalio- ja allergeenitiedot on poimittu/);
+    const firstAllergen = screen.getAllByText("Ilmoitetut allergeenit: kala")[0]!;
+    expect(dataNotice.compareDocumentPosition(firstAllergen) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText(/allergeeniton/i)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Seuraava päivä" }));
     await waitFor(() => expect(fetchMock.mock.calls.at(-1)?.[0]).toBe("/api/days/2026-07-15"));
@@ -145,6 +170,14 @@ describe("reader app", () => {
             lunchHours: index === 1 ? "10.30–14" : null,
             serviceDate: `2026-07-${String(13 + index).padStart(2, "0")}`,
             status: index === 1 ? "published" : index === 0 ? "not_published" : "missing",
+            structuredMenu: index === 1 ? {
+              courses: [{
+                category: "main",
+                dietaryMarkers: ["L", "G"],
+                explicitAllergens: [],
+                nameFi: "Paahdettua kuhaa",
+              }],
+            } : null,
             text: index === 1 ? "Paahdettua kuhaa" : null,
             title: index === 1 ? "Lounas 14.7." : null,
           })),
@@ -165,7 +198,9 @@ describe("reader app", () => {
 
     expect(await screen.findByRole("heading", { name: "Vinola" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Viikon ruokalista" })).toBeTruthy();
-    expect(screen.getByText("Paahdettua kuhaa")).toBeTruthy();
+    expect(screen.getAllByText("Paahdettua kuhaa").length).toBeGreaterThan(0);
+    expect(screen.getByText("L")).toBeTruthy();
+    expect(screen.getByText(/Ruokavalio- ja allergeenitiedot on poimittu/)).toBeTruthy();
     expect(screen.getByText("Ruokalistaa ei ole julkaistu.")).toBeTruthy();
     expect(screen.getAllByText("Tietoja ei ole vielä haettu tälle päivälle.")).toHaveLength(5);
     expect(screen.getByRole("link", { name: "Ravintolan verkkosivut" })).toBeTruthy();
@@ -183,5 +218,121 @@ describe("reader app", () => {
         "/api/restaurants/vinola/weeks/2026-07-13",
       ),
     );
+  });
+
+  it("keeps the unlinked admin route behind a password and adds a page source", async () => {
+    window.history.replaceState({}, "", "/admin");
+    let authenticated = false;
+    const overview = {
+      counts: {
+        assessments: 12,
+        customSources: 0,
+        fetches: 20,
+        offeringRevisions: 18,
+        recommendationSets: 3,
+        restaurants: 8,
+      },
+      errors: [],
+      generatedAt: "2026-07-14T05:00:00.000Z",
+      latestFetch: {
+        attemptedAt: "2026-07-14T04:05:00.000Z",
+        lastSuccessfulAt: "2026-07-14T04:05:00.000Z",
+        outcome: "success",
+      },
+      openAiConfigured: true,
+      refresh: {
+        currentTarget: null,
+        lastError: null,
+        lastFinishedAt: "2026-07-14T04:05:00.000Z",
+        running: false,
+        startedAt: "2026-07-14T04:00:00.000Z",
+      },
+      sources: [],
+      uptimeSeconds: 3600,
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/admin/login") {
+        authenticated = true;
+        return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
+      }
+      if (url === "/api/admin/sources") {
+        return new Response(JSON.stringify({ sourceId: 1 }), { status: 201 });
+      }
+      if (url === "/api/admin/overview" && !authenticated) {
+        return new Response(
+          JSON.stringify({ error: { message: "Kirjaudu sisään jatkaaksesi." } }),
+          { status: 401 },
+        );
+      }
+      expect(init?.method).toBeUndefined();
+      return new Response(JSON.stringify(overview), { status: 200 });
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Kirjaudu ylläpitoon" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Ylläpito" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Salasana"), {
+      target: { value: "a-long-test-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Kirjaudu" }));
+
+    expect(await screen.findByRole("heading", { name: "Järjestelmän tila" })).toBeTruthy();
+    expect(screen.getByText("8")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Ravintolan ruokalistasivu"), {
+      target: { value: "https://backyard.fi/ideapark/" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Lisää ja hae ruokalista" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/admin/sources",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    expect(await screen.findByText("Lähde lisättiin ja ruokalista haettiin.")).toBeTruthy();
+  });
+
+  it("keeps the dashboard visible when logout fails", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const overview = {
+      counts: {
+        assessments: 0,
+        customSources: 0,
+        fetches: 0,
+        offeringRevisions: 0,
+        recommendationSets: 0,
+        restaurants: 0,
+      },
+      errors: [],
+      generatedAt: "2026-07-14T05:00:00.000Z",
+      latestFetch: { attemptedAt: null, lastSuccessfulAt: null, outcome: null },
+      openAiConfigured: false,
+      refresh: {
+        currentTarget: null,
+        lastError: null,
+        lastFinishedAt: null,
+        running: false,
+        startedAt: null,
+      },
+      sources: [],
+      uptimeSeconds: 10,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input) === "/api/admin/logout"
+        ? new Response(
+            JSON.stringify({ error: { message: "Uloskirjautuminen epäonnistui." } }),
+            { status: 500 },
+          )
+        : new Response(JSON.stringify(overview), { status: 200 }),
+    );
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Järjestelmän tila" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Kirjaudu ulos" }));
+
+    expect(await screen.findByText("Uloskirjautuminen epäonnistui.")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Järjestelmän tila" })).toBeTruthy();
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { AdminPage } from "./AdminPage";
 import { fetchJson } from "./api";
 import {
   addDays,
@@ -71,9 +72,62 @@ function RestaurantLink({ restaurant, date }: { restaurant: Restaurant; date: st
   return <a className="text-link" href={href}>Katso viikon ruokalista <span aria-hidden="true">→</span></a>;
 }
 
-function MenuText({ menu }: { menu: Menu }) {
-  if (!menu.text) return <p className="muted">Ei julkaistua ruokalistaa.</p>;
-  return <p className="menu-text">{menu.text}</p>;
+function MenuContent({
+  compact = false,
+  menu,
+}: {
+  compact?: boolean;
+  menu: Pick<Menu, "structuredMenu" | "text">;
+}) {
+  const courses = menu.structuredMenu?.courses ?? [];
+  if (courses.length === 0) {
+    if (!menu.text) return <p className="muted">Ei julkaistua ruokalistaa.</p>;
+    return <p className="menu-text">{menu.text}</p>;
+  }
+  const visibleCourses = compact ? courses.slice(0, 6) : courses;
+
+  return (
+    <div className="structured-menu">
+      <ul className="course-list">
+        {visibleCourses.map((course, index) => (
+          <li key={`${course.nameFi}-${index}`}>
+            <div className="course-line">
+              <span>{course.nameFi}</span>
+              {course.dietaryMarkers.length > 0 && (
+                <span className="dietary-markers" aria-label="Ruokavaliomerkinnät">
+                  {[...new Set(course.dietaryMarkers)].map((marker, markerIndex) => (
+                    <span key={`${marker}-${markerIndex}`}>{marker}</span>
+                  ))}
+                </span>
+              )}
+            </div>
+            {course.explicitAllergens.length > 0 && (
+              <small>Ilmoitetut allergeenit: {course.explicitAllergens.join(", ")}</small>
+            )}
+          </li>
+        ))}
+      </ul>
+      {visibleCourses.length < courses.length && (
+        <p className="more-courses">Lisäksi {courses.length - visibleCourses.length} muuta.</p>
+      )}
+      {!compact && menu.text && (
+        <details className="raw-menu">
+          <summary>Alkuperäinen ruokalistateksti</summary>
+          <p className="menu-text">{menu.text}</p>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function MenuDataNotice() {
+  return (
+    <p className="menu-data-notice">
+      Ruokavalio- ja allergeenitiedot on poimittu ruokalistoista automaattisesti, ja
+      ne voivat olla virheellisiä tai puutteellisia. Jos sinulla on ruoka-allergia,
+      varmista annoksen sopivuus aina ravintolasta.
+    </p>
+  );
 }
 
 function RecommendationList({ data }: { data: DayResponse }) {
@@ -113,9 +167,19 @@ function RecommendationList({ data }: { data: DayResponse }) {
               <h3>{recommendation.restaurant.name}</h3>
               <p className="rationale">{recommendation.rationale}</p>
               <div className="menu-preview">
-                <MenuText menu={recommendation.menu} />
-                {recommendation.menu.lunchHours && (
-                  <span className="hours">Lounas {recommendation.menu.lunchHours}</span>
+                <MenuContent compact menu={recommendation.menu} />
+                <div className="menu-facts">
+                  {recommendation.menu.lunchHours && (
+                    <span className="hours">Lounas {recommendation.menu.lunchHours}</span>
+                  )}
+                  {recommendation.menu.priceText && (
+                    <span className="hours">{recommendation.menu.priceText}</span>
+                  )}
+                </div>
+                {recommendation.menu.source && (
+                  <p className="menu-source">
+                    Lähde: <a href={recommendation.menu.source.url} target="_blank" rel="noreferrer">{recommendation.menu.source.name}</a>
+                  </p>
                 )}
               </div>
               <RestaurantLink restaurant={recommendation.restaurant} date={data.serviceDate} />
@@ -148,9 +212,17 @@ function AllMenus({ data }: { data: DayResponse }) {
                   <h3>{entry.restaurant.name}</h3>
                   {entry.restaurant.address && <p>{entry.restaurant.address}</p>}
                 </div>
-                {entry.menu.lunchHours && <span className="hours">{entry.menu.lunchHours}</span>}
+                <div className="menu-facts">
+                  {entry.menu.lunchHours && <span className="hours">{entry.menu.lunchHours}</span>}
+                  {entry.menu.priceText && <span className="hours">{entry.menu.priceText}</span>}
+                </div>
               </div>
-              <MenuText menu={entry.menu} />
+              <MenuContent menu={entry.menu} />
+              {entry.menu.source && (
+                <p className="menu-source">
+                  Lähde: <a href={entry.menu.source.url} target="_blank" rel="noreferrer">{entry.menu.source.name}</a>
+                </p>
+              )}
               <RestaurantLink restaurant={entry.restaurant} date={data.serviceDate} />
             </li>
           ))}
@@ -224,6 +296,9 @@ function DayPage() {
             )}
             {!(data.stale && data.lastSuccessfulFetchAt === null) && (
               <>
+                {data.menus.some((entry) => entry.menu.structuredMenu?.courses.length) && (
+                  <MenuDataNotice />
+                )}
                 <RecommendationList data={data} />
                 <AllMenus data={data} />
               </>
@@ -362,15 +437,21 @@ function RestaurantPage({ restaurantId }: { restaurantId: string }) {
                     <h2 id="week-menu-title">Viikon ruokalista</h2>
                   </div>
                 </div>
+                {data.days.some((day) => day.structuredMenu?.courses.length) && (
+                  <MenuDataNotice />
+                )}
                 <div className="week-grid">
                   {data.days.map((day) => (
                     <article className={`day-card ${day.status !== "published" ? "day-card-empty" : ""}`} key={day.serviceDate}>
                       <div className="day-card-heading">
                         <h3>{formatLongDate(day.serviceDate)}</h3>
-                        {day.lunchHours && <span className="hours">{day.lunchHours}</span>}
+                        <div className="menu-facts">
+                          {day.lunchHours && <span className="hours">{day.lunchHours}</span>}
+                          {day.priceText && <span className="hours">{day.priceText}</span>}
+                        </div>
                       </div>
                       {day.text ? (
-                        <p className="menu-text">{day.text}</p>
+                        <MenuContent menu={day} />
                       ) : (
                         <p className="muted">
                           {day.status === "missing"
@@ -407,6 +488,9 @@ function RestaurantPage({ restaurantId }: { restaurantId: string }) {
 }
 
 export function App() {
+  if (window.location.pathname === "/admin" || window.location.pathname === "/admin/") {
+    return <AdminPage />;
+  }
   const restaurantMatch = window.location.pathname.match(/^\/ravintolat\/([^/]+)\/?$/);
   if (restaurantMatch?.[1]) return <RestaurantPage restaurantId={decodeURIComponent(restaurantMatch[1])} />;
   return <DayPage />;

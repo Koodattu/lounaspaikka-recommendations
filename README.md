@@ -9,8 +9,9 @@ The first version is intentionally narrow: no user accounts, personalization, qu
 - At startup and every day at 04:15 Europe/Helsinki, the backend refreshes dates from today through Sunday. A Sunday refresh includes the following week.
 - An admin can add a public HTTPS restaurant page that is missing from Lounaspaikka. Its menu must be present in the static page text; PDF menus and browser-rendered pages are not supported. The page is extracted into the same dated menu structure and refreshed with the normal daily run.
 - Identical menus create a new freshness observation, not a duplicate revision. Changed menus remain available as immutable history.
-- When `OPENAI_API_KEY` is set, it extracts custom menu pages and assesses only unseen menu revisions. The model returns four 0–10 scores and one short Finnish recommendation rationale.
+- When `OPENAI_API_KEY` is set, it extracts custom menu pages and assesses only unseen menu revisions. The model sees menu facts without restaurant identity and returns four conservatively calibrated 0–10 scores plus one short Finnish recommendation rationale.
 - Ranking is deterministic: appeal 35%, distinctiveness 25%, variety 20%, and value 20%. Ties are ordered by restaurant ID.
+- The admin can label recent immutable assessments as too high or too low. Labels are stored for shared-profile calibration and never act as hidden restaurant penalties or immediate ranking overrides.
 - The reader UI is Finnish. OpenAI instructions and all code are English; model rationales are Finnish.
 
 ## Run with Docker Compose
@@ -27,6 +28,8 @@ docker compose up -d --build --wait
 Open [http://localhost](http://localhost). Lounaspaikka collection still runs without an OpenAI key, but recommendations and custom page extraction are disabled.
 
 The admin screen is intentionally not linked from the reader UI. Open `/admin` directly and sign in with `ADMIN_PASSWORD`. The session lasts eight hours and is cleared when the backend restarts. Use HTTPS for every public deployment.
+
+Treat calibration feedback as a review dataset: collect a balanced set of labels, identify restaurant-name-free menu patterns, update the explicit rubric or shared profile, and increment its version. A version change triggers reproducible reassessment; feedback itself does not silently alter published scores.
 
 For production, set `SITE_ADDRESS` to a DNS name such as `lounas.example.fi`, point that name at the host, and allow inbound TCP 80/443. Caddy then obtains and renews HTTPS certificates automatically.
 

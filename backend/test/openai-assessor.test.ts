@@ -54,7 +54,12 @@ describe("OpenAI lunch assessor", () => {
     expect(request.instructions).toContain("Never infer allergens");
     expect(request.instructions).toContain("Copy dietaryMarkers exactly");
     expect(request.instructions).toContain("Otherwise use unknown");
+    expect(request.instructions).toContain("5 is an ordinary competent lunch");
+    expect(request.instructions).toContain("buffet components");
+    expect(request.instructions).toContain("use a neutral 5 when no price is stated");
+    expect(request.instructions).toContain("Never shorten it or stop mid-word");
     expect(request.input).toContain("Paahdettua kuhaa");
+    expect(request.input).not.toContain("B-ravintola");
     expect(request.input).not.toContain("revisionId");
     expect(request.max_output_tokens).toBe(1_200);
     expect(request.text.format.type).toBe("json_schema");

@@ -92,7 +92,7 @@ function MenuContent({
         {visibleCourses.map((course, index) => (
           <li key={`${course.nameFi}-${index}`}>
             <div className="course-line">
-              <span>{course.nameFi}</span>
+              <span className="course-name">{course.nameFi}</span>
               {course.dietaryMarkers.length > 0 && (
                 <span className="dietary-markers" aria-label="Ruokavaliomerkinnät">
                   {[...new Set(course.dietaryMarkers)].map((marker, markerIndex) => (

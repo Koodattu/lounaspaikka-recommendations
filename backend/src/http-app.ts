@@ -88,6 +88,7 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
   app.get("/api/admin/overview", { preHandler: requireAdmin }, async () =>
     getAdminOverview(options.db, {
       openAiConfigured: options.openAiConfigured ?? false,
+      recommendationVersions: options.recommendationVersions,
       refresh: options.refreshStatus?.() ?? {
         currentTarget: null,
         lastError: null,
@@ -137,6 +138,62 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
           },
         });
       }
+    },
+  );
+
+  app.put<{
+    Body: { direction?: unknown };
+    Params: { assessmentId: string };
+  }>(
+    "/api/admin/assessments/:assessmentId/feedback",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const { assessmentId: assessmentIdText } = request.params;
+      if (!/^[1-9]\d*$/.test(assessmentIdText)) {
+        return reply.code(400).send({
+          error: { code: "INVALID_ASSESSMENT_ID", message: "Arvio ei kelpaa." },
+        });
+      }
+      const assessmentId = Number(assessmentIdText);
+      if (!Number.isSafeInteger(assessmentId)) {
+        return reply.code(400).send({
+          error: { code: "INVALID_ASSESSMENT_ID", message: "Arvio ei kelpaa." },
+        });
+      }
+      const direction = request.body?.direction;
+      if (direction !== "lower" && direction !== "higher" && direction !== null) {
+        return reply.code(400).send({
+          error: {
+            code: "INVALID_FEEDBACK",
+            message: "Valitse, ovatko pisteet liian korkeat vai liian matalat.",
+          },
+        });
+      }
+      const assessment = options.db
+        .prepare("SELECT id FROM assessments WHERE id = ?")
+        .get(assessmentId);
+      if (!assessment) {
+        return reply.code(404).send({
+          error: { code: "ASSESSMENT_NOT_FOUND", message: "Arviota ei löytynyt." },
+        });
+      }
+
+      if (direction === null) {
+        options.db
+          .prepare("DELETE FROM assessment_feedback WHERE assessment_id = ?")
+          .run(assessmentId);
+      } else {
+        options.db
+          .prepare(
+            `INSERT INTO assessment_feedback (assessment_id, direction, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(assessment_id) DO UPDATE SET
+               direction = excluded.direction,
+               updated_at = excluded.updated_at`,
+          )
+          .run(assessmentId, direction, new Date().toISOString());
+      }
+      return { assessmentId, direction };
     },
   );
 

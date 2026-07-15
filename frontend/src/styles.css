@@ -385,6 +385,11 @@ h3 {
   line-height: 1.4;
 }
 
+.course-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .dietary-markers {
   display: inline-flex;
   flex: 0 0 auto;
@@ -990,6 +995,199 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 
+.admin-calibration-intro {
+  max-width: 760px;
+  margin: 12px 0 0;
+}
+
+.admin-calibration-heading {
+  flex-wrap: wrap;
+}
+
+.admin-calibration-toolbar {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 5px 9px;
+  align-items: center;
+  justify-items: end;
+}
+
+.admin-calibration-toolbar label,
+.admin-calibration-toolbar span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.admin-calibration-toolbar select {
+  min-height: 40px;
+  padding: 8px 30px 8px 10px;
+  border: 1px solid rgba(32, 38, 29, 0.24);
+  border-radius: 11px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.admin-calibration-toolbar select:focus-visible {
+  border-color: var(--accent);
+  outline: 3px solid rgba(226, 90, 49, 0.16);
+  outline-offset: 1px;
+}
+
+.admin-calibration-toolbar > span {
+  grid-column: 1 / -1;
+}
+
+.admin-assessment-list {
+  padding: 0;
+  margin: 22px 0 0;
+  list-style: none;
+}
+
+.admin-assessment-list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: start;
+  padding: 20px 0;
+  border-top: 1px solid var(--line);
+}
+
+.admin-assessment-summary {
+  min-width: 0;
+}
+
+.admin-assessment-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.admin-assessment-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.admin-assessment-heading > div > span,
+.admin-feedback-control > span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-assessment-total {
+  flex: 0 0 auto;
+  font-size: 1.45rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+
+.admin-assessment-total small {
+  margin-left: 2px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0;
+}
+
+.admin-score-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 18px;
+  margin: 14px 0 0;
+}
+
+.admin-score-breakdown > div {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+}
+
+.admin-score-breakdown dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.admin-score-breakdown dd {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-assessment-rationale {
+  max-width: 75ch;
+  margin: 13px 0 0;
+  color: var(--ink);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.admin-assessment-menu {
+  margin-top: 11px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.admin-assessment-menu summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 720;
+  text-underline-offset: 3px;
+}
+
+.admin-assessment-menu p {
+  max-width: 75ch;
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.admin-feedback-control {
+  display: grid;
+  gap: 7px;
+  justify-items: end;
+}
+
+.admin-feedback-control > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.admin-feedback-button {
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 740;
+  white-space: nowrap;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 100ms ease;
+}
+
+.admin-feedback-button[data-direction="lower"][aria-pressed="true"] {
+  color: #8f2e27;
+  border-color: rgba(155, 48, 39, 0.34);
+  background: #fff0ed;
+}
+
+.admin-feedback-button[data-direction="higher"][aria-pressed="true"] {
+  color: #2f6b3d;
+  border-color: rgba(47, 107, 61, 0.34);
+  background: #eef8f0;
+}
+
+.admin-feedback-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .admin-empty {
   padding: 23px 0 3px;
   margin: 0;
@@ -1070,12 +1268,21 @@ h3 {
     border-color: rgba(32, 38, 29, 0.28);
     background: var(--paper);
   }
+
+  .admin-feedback-button:hover:not(:disabled):not([aria-pressed="true"]) {
+    border-color: rgba(32, 38, 29, 0.28);
+    background: rgba(244, 239, 229, 0.58);
+  }
 }
 
 .date-navigation button:active,
 .week-toolbar button:active,
 .button:active {
   transform: scale(0.96);
+}
+
+.admin-feedback-button:active {
+  transform: scale(0.97);
 }
 
 @media (max-width: 820px) {
@@ -1107,6 +1314,14 @@ h3 {
 
   .admin-layout {
     grid-template-columns: 1fr;
+  }
+
+  .admin-assessment-list > li {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-feedback-control {
+    justify-items: start;
   }
 
   .opening-hours {

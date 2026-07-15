@@ -61,6 +61,23 @@ export interface AdminOverview {
     running: boolean;
     startedAt: string | null;
   };
+  recentAssessments: Array<{
+    assessedAt: string;
+    assessmentId: number;
+    feedbackDirection: "higher" | "lower" | null;
+    menuText: string | null;
+    rationale: string;
+    restaurantId: string;
+    restaurantName: string;
+    score: number;
+    scores: {
+      appeal: number;
+      distinctiveness: number;
+      value: number;
+      variety: number;
+    };
+    serviceDate: string;
+  }>;
   sources: Array<{
     createdAt: string;
     enabled: boolean;

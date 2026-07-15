@@ -44,7 +44,7 @@ describe("custom menu sources", () => {
 
   it("unions source-scoped snapshots and reuses an unchanged page extraction", async () => {
     db = openDatabase(":memory:");
-    expect(db.pragma("user_version", { simple: true })).toBe(4);
+    expect(db.pragma("user_version", { simple: true })).toBe(5);
     await ingestLunchDay({
       db,
       now: () => new Date("2026-07-14T03:00:00.000Z"),

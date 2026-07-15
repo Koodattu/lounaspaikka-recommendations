@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 
-import { formatUpdatedAt } from "./dates";
+import { formatShortDate, formatUpdatedAt, todayInHelsinki } from "./dates";
 import type { AdminOverview } from "./types";
 
 class AdminRequestError extends Error {
@@ -94,6 +94,23 @@ const countLabels: Array<[keyof AdminOverview["counts"], string]> = [
   ["recommendationSets", "Suosituspäiviä"],
 ];
 
+const assessmentScoreLabels: Array<[
+  keyof AdminOverview["recentAssessments"][number]["scores"],
+  string,
+]> = [
+  ["appeal", "Houkuttelevuus"],
+  ["distinctiveness", "Erityisyys"],
+  ["variety", "Vaihtelu"],
+  ["value", "Hinta–laatu"],
+];
+
+function formatScore(value: number): string {
+  return value.toLocaleString("fi-FI", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  });
+}
+
 function timeOrDash(value: string | null): string {
   return value ? formatUpdatedAt(value) : "–";
 }
@@ -125,8 +142,27 @@ function AdminDashboard({
 }) {
   const [url, setUrl] = useState("");
   const [adding, setAdding] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [savingAssessmentId, setSavingAssessmentId] = useState<number | null>(null);
   const [sourceMessage, setSourceMessage] = useState<string | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
+  const assessmentDates = Array.from(
+    new Set(data.recentAssessments.map((assessment) => assessment.serviceDate)),
+  ).sort((a, b) => b.localeCompare(a));
+  const today = todayInHelsinki();
+  const defaultAssessmentDate = assessmentDates.includes(today)
+    ? today
+    : assessmentDates[0] ?? "";
+  const [selectedAssessmentDate, setSelectedAssessmentDate] = useState(defaultAssessmentDate);
+  const visibleAssessments = data.recentAssessments.filter(
+    (assessment) => assessment.serviceDate === selectedAssessmentDate,
+  );
+
+  useEffect(() => {
+    if (!assessmentDates.includes(selectedAssessmentDate)) {
+      setSelectedAssessmentDate(defaultAssessmentDate);
+    }
+  }, [data.recentAssessments, defaultAssessmentDate, selectedAssessmentDate]);
 
   async function addSource(event: FormEvent) {
     event.preventDefault();
@@ -146,6 +182,26 @@ function AdminDashboard({
     } finally {
       await onRefresh();
       setAdding(false);
+    }
+  }
+
+  async function saveAssessmentFeedback(
+    assessmentId: number,
+    direction: "higher" | "lower" | null,
+  ) {
+    setSavingAssessmentId(assessmentId);
+    setFeedbackError(null);
+    try {
+      await adminRequest(`/api/admin/assessments/${assessmentId}/feedback`, {
+        body: JSON.stringify({ direction }),
+        headers: { "content-type": "application/json" },
+        method: "PUT",
+      });
+      await onRefresh();
+    } catch (error) {
+      setFeedbackError(error instanceof Error ? error.message : "Palautetta ei saatu tallennettua.");
+    } finally {
+      setSavingAssessmentId(null);
     }
   }
 
@@ -184,6 +240,111 @@ function AdminDashboard({
             <span>{label}</span>
           </article>
         ))}
+      </section>
+
+      <section className="admin-panel admin-wide-panel" aria-labelledby="calibration-title">
+        <div className="admin-section-heading admin-calibration-heading">
+          <div>
+            <span className="eyebrow">Suositukset</span>
+            <h2 id="calibration-title">Arvioiden kalibrointi</h2>
+          </div>
+          <div className="admin-calibration-toolbar">
+            <label htmlFor="assessment-date">Lounaspäivä</label>
+            <select
+              disabled={assessmentDates.length === 0}
+              id="assessment-date"
+              onChange={(event) => setSelectedAssessmentDate(event.target.value)}
+              value={selectedAssessmentDate}
+            >
+              {assessmentDates.map((serviceDate) => (
+                <option key={serviceDate} value={serviceDate}>{formatShortDate(serviceDate)}</option>
+              ))}
+            </select>
+            <span>
+              {visibleAssessments.length === 1
+                ? "1 arvio"
+                : `${visibleAssessments.length} arviota`}
+            </span>
+          </div>
+        </div>
+        <p className="admin-calibration-intro">
+          Valitse päivä ja merkitse, ovatko kokonaispisteet mielestäsi liian korkeat vai
+          liian matalat. Palaute tallentuu arviointiohjeen seuraavaa kalibrointia varten
+          eikä muuta julkaistua top 3:a heti.
+        </p>
+        {feedbackError && <p className="admin-inline-error" role="alert">{feedbackError}</p>}
+        {visibleAssessments.length === 0 ? (
+          <p className="admin-empty">Aktiivisen arviointiversion arvioita ei ole vielä.</p>
+        ) : (
+          <ul className="admin-assessment-list">
+            {visibleAssessments.map((assessment) => {
+              const saving = savingAssessmentId === assessment.assessmentId;
+              return (
+                <li aria-busy={saving} key={assessment.assessmentId}>
+                  <div className="admin-assessment-summary">
+                    <div className="admin-assessment-heading">
+                      <div>
+                        <strong>{assessment.restaurantName}</strong>
+                        <span>
+                          {formatShortDate(assessment.serviceDate)} · arvioitu {formatUpdatedAt(assessment.assessedAt)}
+                        </span>
+                      </div>
+                      <strong className="admin-assessment-total" aria-label={`Kokonaispisteet ${formatScore(assessment.score)} / 10`}>
+                        {formatScore(assessment.score)}<small>/10</small>
+                      </strong>
+                    </div>
+                    <dl className="admin-score-breakdown">
+                      {assessmentScoreLabels.map(([key, label]) => (
+                        <div key={key}>
+                          <dt>{label}</dt>
+                          <dd>{formatScore(assessment.scores[key])}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <p className="admin-assessment-rationale">{assessment.rationale}</p>
+                    {assessment.menuText && (
+                      <details className="admin-assessment-menu">
+                        <summary>Näytä arvioitu ruokalista</summary>
+                        <p>{assessment.menuText}</p>
+                      </details>
+                    )}
+                  </div>
+                  <div className="admin-feedback-control">
+                    <span>{saving ? "Tallennetaan…" : "Oma arvio"}</span>
+                    <div role="group" aria-label={`Oma arvio: ${assessment.restaurantName}, ${formatShortDate(assessment.serviceDate)}`}>
+                      <button
+                        aria-pressed={assessment.feedbackDirection === "lower"}
+                        className="admin-feedback-button"
+                        data-direction="lower"
+                        disabled={savingAssessmentId !== null}
+                        onClick={() => void saveAssessmentFeedback(
+                          assessment.assessmentId,
+                          assessment.feedbackDirection === "lower" ? null : "lower",
+                        )}
+                        type="button"
+                      >
+                        Liian korkea
+                      </button>
+                      <button
+                        aria-pressed={assessment.feedbackDirection === "higher"}
+                        className="admin-feedback-button"
+                        data-direction="higher"
+                        disabled={savingAssessmentId !== null}
+                        onClick={() => void saveAssessmentFeedback(
+                          assessment.assessmentId,
+                          assessment.feedbackDirection === "higher" ? null : "higher",
+                        )}
+                        type="button"
+                      >
+                        Liian matala
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       <div className="admin-layout">

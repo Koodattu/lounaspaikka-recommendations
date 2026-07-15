@@ -21,7 +21,7 @@ export const structuredMenuSchema = z.object({
       ]),
       dietaryMarkers: z.array(z.string().trim().min(1).max(24)).max(6),
       explicitAllergens: z.array(z.string().trim().min(1).max(40)).max(16),
-      nameFi: z.string().trim().min(2).max(120),
+      nameFi: z.string().trim().min(2).max(300),
     }),
   ).max(32),
 });
@@ -96,10 +96,10 @@ export interface RecommendationResult {
 export const defaultRecommendationVersions: RecommendationVersions = {
   model: "gpt-5.4-nano",
   profileVersion: "shared-v1",
-  promptVersion: "v4",
+  promptVersion: "v5",
   rankingVersion: "weighted-v1",
-  rubricVersion: "v1",
-  schemaVersion: "v3",
+  rubricVersion: "v2",
+  schemaVersion: "v4",
 };
 
 interface CandidateRow {

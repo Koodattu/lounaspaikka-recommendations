@@ -223,6 +223,7 @@ describe("reader app", () => {
   it("keeps the unlinked admin route behind a password and adds a page source", async () => {
     window.history.replaceState({}, "", "/admin");
     let authenticated = false;
+    let feedbackDirection: "higher" | "lower" | null = null;
     const overview = {
       counts: {
         assessments: 12,
@@ -240,6 +241,32 @@ describe("reader app", () => {
         outcome: "success",
       },
       openAiConfigured: true,
+      recentAssessments: [
+        {
+          assessedAt: "2026-07-14T04:11:00.000Z",
+          assessmentId: 42,
+          feedbackDirection: null,
+          menuText: "Paahdettua kuhaa ja perunoita",
+          rationale: "Kuha tekee listasta kiinnostavan.",
+          restaurantId: "vinola",
+          restaurantName: "Vinola",
+          score: 8.2,
+          scores: { appeal: 8, distinctiveness: 9, value: 7, variety: 8 },
+          serviceDate: "2026-07-14",
+        },
+        {
+          assessedAt: "2026-07-13T04:11:00.000Z",
+          assessmentId: 43,
+          feedbackDirection: null,
+          menuText: "Tortillabuffet",
+          rationale: "Tortillavaihtoehdot saivat korkean arvion.",
+          restaurantId: "pancho",
+          restaurantName: "Pancho Villa",
+          score: 8.4,
+          scores: { appeal: 8, distinctiveness: 8, value: 8, variety: 10 },
+          serviceDate: "2026-07-13",
+        },
+      ],
       refresh: {
         currentTarget: null,
         lastError: null,
@@ -259,6 +286,15 @@ describe("reader app", () => {
       if (url === "/api/admin/sources") {
         return new Response(JSON.stringify({ sourceId: 1 }), { status: 201 });
       }
+      if (url === "/api/admin/assessments/42/feedback") {
+        const body = JSON.parse(String(init?.body)) as {
+          direction: "higher" | "lower" | null;
+        };
+        feedbackDirection = body.direction;
+        return new Response(JSON.stringify({ assessmentId: 42, direction: feedbackDirection }), {
+          status: 200,
+        });
+      }
       if (url === "/api/admin/overview" && !authenticated) {
         return new Response(
           JSON.stringify({ error: { message: "Kirjaudu sisään jatkaaksesi." } }),
@@ -266,7 +302,15 @@ describe("reader app", () => {
         );
       }
       expect(init?.method).toBeUndefined();
-      return new Response(JSON.stringify(overview), { status: 200 });
+      return new Response(JSON.stringify({
+        ...overview,
+        recentAssessments: overview.recentAssessments.map((assessment) => ({
+          ...assessment,
+          feedbackDirection: assessment.assessmentId === 42
+            ? feedbackDirection
+            : assessment.feedbackDirection,
+        })),
+      }), { status: 200 });
     });
 
     render(<App />);
@@ -280,6 +324,27 @@ describe("reader app", () => {
 
     expect(await screen.findByRole("heading", { name: "Järjestelmän tila" })).toBeTruthy();
     expect(screen.getByText("8")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Arvioiden kalibrointi" })).toBeTruthy();
+    expect(screen.getByText("Kuha tekee listasta kiinnostavan.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Liian korkea" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/admin/assessments/42/feedback",
+        expect.objectContaining({
+          body: JSON.stringify({ direction: "lower" }),
+          method: "PUT",
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Liian korkea" }).getAttribute("aria-pressed"))
+        .toBe("true"),
+    );
+    fireEvent.change(screen.getByLabelText("Lounaspäivä"), {
+      target: { value: "2026-07-13" },
+    });
+    expect(screen.getByText("Tortillavaihtoehdot saivat korkean arvion.")).toBeTruthy();
+    expect(screen.queryByText("Kuha tekee listasta kiinnostavan.")).toBeNull();
     fireEvent.change(screen.getByLabelText("Ravintolan ruokalistasivu"), {
       target: { value: "https://backyard.fi/ideapark/" },
     });
@@ -309,6 +374,7 @@ describe("reader app", () => {
       generatedAt: "2026-07-14T05:00:00.000Z",
       latestFetch: { attemptedAt: null, lastSuccessfulAt: null, outcome: null },
       openAiConfigured: false,
+      recentAssessments: [],
       refresh: {
         currentTarget: null,
         lastError: null,

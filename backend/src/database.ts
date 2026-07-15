@@ -149,6 +149,14 @@ const migrationFour = `
   ALTER TABLE assessments ADD COLUMN structured_menu_json TEXT;
 `;
 
+const migrationFive = `
+  CREATE TABLE assessment_feedback (
+    assessment_id INTEGER PRIMARY KEY REFERENCES assessments(id),
+    direction TEXT NOT NULL CHECK (direction IN ('lower', 'higher')),
+    updated_at TEXT NOT NULL
+  );
+`;
+
 export function openDatabase(path: string): Database.Database {
   const db = new Database(path);
   db.pragma("foreign_keys = ON");
@@ -181,6 +189,13 @@ export function openDatabase(path: string): Database.Database {
     db.transaction(() => {
       db.exec(migrationFour);
       db.pragma("user_version = 4");
+    })();
+    version = 4;
+  }
+  if (version < 5) {
+    db.transaction(() => {
+      db.exec(migrationFive);
+      db.pragma("user_version = 5");
     })();
   }
 

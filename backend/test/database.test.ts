@@ -18,6 +18,7 @@ describe("database migrations", () => {
     const path = join(directory, "lunch.sqlite");
     const fixture = openDatabase(path);
     fixture.exec(`
+      DROP TABLE assessment_feedback;
       DROP INDEX restaurants_by_custom_source;
       DROP INDEX source_fetches_by_date_source;
       DROP INDEX custom_source_runs_by_source;
@@ -44,7 +45,7 @@ describe("database migrations", () => {
 
     const migrated = openDatabase(path);
 
-    expect(migrated.pragma("user_version", { simple: true })).toBe(4);
+    expect(migrated.pragma("user_version", { simple: true })).toBe(5);
     expect(migrated.prepare(
       "SELECT name, custom_source_id AS customSourceId FROM restaurants WHERE id = 'api-1'",
     ).get()).toEqual({ customSourceId: null, name: "Vanha ravintola" });
@@ -54,6 +55,9 @@ describe("database migrations", () => {
     expect(migrated.prepare(
       "SELECT structured_menu_json AS structuredMenuJson FROM assessments LIMIT 1",
     ).get()).toBeUndefined();
+    expect(migrated.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'assessment_feedback'",
+    ).get()).toEqual({ name: "assessment_feedback" });
     migrated.close();
   });
 
@@ -62,6 +66,7 @@ describe("database migrations", () => {
     const path = join(directory, "lunch.sqlite");
     const fixture = openDatabase(path);
     fixture.exec(`
+      DROP TABLE assessment_feedback;
       ALTER TABLE assessments DROP COLUMN structured_menu_json;
       PRAGMA user_version = 3;
     `);
@@ -95,7 +100,7 @@ describe("database migrations", () => {
 
     const migrated = openDatabase(path);
 
-    expect(migrated.pragma("user_version", { simple: true })).toBe(4);
+    expect(migrated.pragma("user_version", { simple: true })).toBe(5);
     expect(migrated.prepare(
       `SELECT rationale_fi AS rationaleFi, structured_menu_json AS structuredMenuJson
        FROM assessments`,

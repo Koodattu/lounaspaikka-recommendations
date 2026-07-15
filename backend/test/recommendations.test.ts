@@ -91,8 +91,8 @@ describe("daily recommendations", () => {
       `SELECT assessment.structured_menu_json AS structuredMenuJson, revision.menu_text AS menuText
        FROM assessments assessment
        JOIN offering_revisions revision ON revision.id = assessment.revision_id
-       WHERE revision.restaurant_id = 'b' AND assessment.prompt_version = 'v4'
-         AND assessment.schema_version = 'v3'`,
+       WHERE revision.restaurant_id = 'b' AND assessment.prompt_version = 'v5'
+         AND assessment.schema_version = 'v4'`,
     ).get() as { menuText: string; structuredMenuJson: string };
     expect(storedMenu.menuText).toBe("Paahdettua kuhaa");
     expect(JSON.parse(storedMenu.structuredMenuJson)).toEqual({
@@ -188,5 +188,27 @@ describe("structured menu schema", () => {
         courses: [{ ...course, explicitAllergens: [...course.explicitAllergens, "liikaa"] }],
       }).success,
     ).toBe(false);
+  });
+
+  it("preserves a long published course name without allowing unbounded output", () => {
+    const longName = "Keitetyt naudanliha-sipulidumplingit tai keitetyt porsaanliha-purjo-kiinankaali-sieni-maissi-ruohosipuli-katkarapudumplingit";
+
+    expect(longName.length).toBeGreaterThan(120);
+    expect(structuredMenuSchema.safeParse({
+      courses: [{
+        category: "main",
+        dietaryMarkers: [],
+        explicitAllergens: [],
+        nameFi: longName,
+      }],
+    }).success).toBe(true);
+    expect(structuredMenuSchema.safeParse({
+      courses: [{
+        category: "main",
+        dietaryMarkers: [],
+        explicitAllergens: [],
+        nameFi: "x".repeat(301),
+      }],
+    }).success).toBe(false);
   });
 });

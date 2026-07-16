@@ -254,9 +254,13 @@ Components feel aligned, compact, and touchable. They reuse a small vocabulary a
 
 ### Recommendation Wayfinder
 
-The first recommendation is the single solid Route Green anchor. Rank, restaurant, rationale, and two or three decision facts form one scan path. The second and third recommendations are quieter aligned companions rather than three equally promoted marketplace cards. The full menu offering becomes a calm row or reading list when that structure scans faster than a card grid.
+The first recommendation is the single solid Route Green anchor. Rank, restaurant, rationale, and two or three decision facts form one scan path. A route action may follow the menu action as a quieter real-world handoff. The second and third recommendations are quieter aligned companions rather than three equally promoted marketplace cards; each still shows one dish and a short rationale so it can work as a genuine fallback. The full menu offering becomes a calm row or reading list when that structure scans faster than a card grid.
 
 **The One Decision Rule.** The current date and leading recommendation must be identifiable in the first mobile viewport without relying on animation.
+
+### Safety and Status
+
+Automatically extracted dietary markers never stand alone. An always-visible sentence tells readers to verify allergens with the restaurant, while a native disclosure contains the longer explanation. Loading and successful date/week changes are announced through stable polite status regions, and an empty week always provides a recovery path.
 
 ## 6. Do's and Don'ts
 
@@ -266,6 +270,8 @@ The first recommendation is the single solid Route Green anchor. Rank, restauran
 - **Do** keep interactive targets at least 46px high and preserve visible keyboard focus.
 - **Do** use Route Green for primary action and Signal Clay only for rare orientation and state cues.
 - **Do** show ranking criteria, source, freshness, and stale or unavailable states in plain Finnish.
+- **Do** announce completed date and week changes without moving focus unexpectedly.
+- **Do** pair automatically extracted dietary markers with an always-visible verification message.
 - **Do** use full dividers, alignment, and 18–24px internal spacing before introducing another container.
 - **Do** keep long rationales and operational prose within 70ch.
 - **Do** use text or an icon alongside color for warning, danger, success, and selected states.

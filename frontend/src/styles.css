@@ -1453,6 +1453,12 @@ h3 {
   --quiet-divider: rgba(32, 38, 29, 0.14);
   --warning-ink: #6e4620;
   --warning-surface: #fff1d8;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 18px;
+  --space-xl: 24px;
+  --space-section: 52px;
 }
 
 html,
@@ -1472,6 +1478,22 @@ body {
 .reader-header .brand {
   gap: 9px;
   min-height: 46px;
+}
+
+.reader-header .brand-mark {
+  position: relative;
+}
+
+.reader-header .brand-mark::after {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 6px;
+  height: 6px;
+  border: 2px solid var(--route-green);
+  border-radius: 50%;
+  background: var(--signal-clay);
+  content: "";
 }
 
 .brand-copy {
@@ -1741,16 +1763,31 @@ body {
   color: var(--light-on-dark);
 }
 
+.recommendation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: stretch;
+  margin-top: var(--space-lg);
+}
+
 .recommendation-primary-link {
-  width: 100%;
+  flex: 1 1 210px;
   min-height: 46px;
   justify-content: space-between;
-  padding: 10px 13px;
-  margin-top: 14px;
+  padding: 11px 16px;
+  margin-top: 0;
   border: 1px solid rgba(255, 250, 241, 0.64);
   border-radius: 10px;
   color: var(--light-on-dark);
   text-decoration: none;
+}
+
+.recommendation-route-link {
+  flex: 0 0 auto;
+  justify-content: center;
+  padding-inline: 8px;
+  color: var(--light-on-dark);
 }
 
 .recommendation-companions {
@@ -1773,16 +1810,21 @@ body {
 
 .recommendation-row {
   display: grid;
-  min-height: 76px;
-  grid-template-columns: 26px minmax(0, 1fr) auto 18px;
-  gap: 10px;
-  align-items: center;
-  padding: 12px;
+  min-height: 0;
+  grid-template-areas:
+    "rank main arrow"
+    ". facts arrow";
+  grid-template-columns: 24px minmax(0, 1fr) 18px;
+  column-gap: var(--space-md);
+  row-gap: var(--space-sm);
+  align-items: start;
+  padding: var(--space-md);
   text-decoration: none;
   transition: background-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .rank-number {
+  grid-area: rank;
   font-size: 1rem;
   font-weight: 760;
   font-variant-numeric: tabular-nums;
@@ -1790,7 +1832,8 @@ body {
 
 .recommendation-row-main {
   display: grid;
-  gap: 3px;
+  grid-area: main;
+  gap: var(--space-xs);
   min-width: 0;
 }
 
@@ -1802,13 +1845,42 @@ body {
 .recommendation-row-main small,
 .recommendation-row-facts {
   color: var(--ink);
-  font-size: 0.74rem;
+  font-size: 0.78rem;
   line-height: 1.3;
 }
 
+.recommendation-row-dish {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: var(--space-xs);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  font-size: 0.84rem;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.recommendation-row-rationale {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: var(--space-xs);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-weight: 400;
+  line-height: 1.4 !important;
+  text-wrap: pretty;
+}
+
 .recommendation-row-facts {
+  grid-area: facts;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+}
+
+.recommendation-row-arrow {
+  grid-area: arrow;
+  align-self: start;
+  justify-self: end;
+  padding-top: 1px;
 }
 
 .recommendation-trust {
@@ -1829,9 +1901,30 @@ body {
   text-underline-offset: 3px;
 }
 
+.dietary-safety-note {
+  padding: var(--space-sm) 10px;
+  margin: 0 0 var(--space-md);
+  border-radius: 10px;
+  color: var(--warning-ink);
+  background: var(--warning-surface);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.dietary-safety-note strong {
+  margin-inline-end: var(--space-xs);
+}
+
+.recommendation-card .dietary-safety-note {
+  border: 1px solid rgba(255, 250, 241, 0.28);
+  color: var(--light-on-dark);
+  background: rgba(255, 250, 241, 0.08);
+}
+
 .menu-data-notice {
+  overflow: hidden;
   padding: 0;
-  margin: 0 0 18px;
+  margin: 0 0 var(--space-lg);
   border: 1px solid var(--quiet-divider);
   border-radius: 12px;
   color: var(--ink);
@@ -1840,14 +1933,34 @@ body {
   line-height: 1.5;
 }
 
+.menu-data-warning {
+  max-width: none;
+  padding: var(--space-md);
+  margin: 0;
+  color: var(--warning-ink);
+  background: var(--warning-surface);
+}
+
+.menu-data-warning strong {
+  margin-inline-end: var(--space-xs);
+}
+
+.menu-data-notice details {
+  border-top: 1px solid rgba(110, 70, 32, 0.2);
+}
+
 .menu-data-notice summary {
   display: flex;
   min-height: 46px;
   align-items: center;
-  padding: 10px 13px;
+  padding: 10px var(--space-md);
   cursor: pointer;
   font-weight: 720;
   list-style: none;
+}
+
+.menu-data-notice summary:focus-visible {
+  outline-offset: -4px !important;
 }
 
 .menu-data-notice summary::-webkit-details-marker,
@@ -1857,23 +1970,23 @@ body {
 }
 
 .menu-data-notice summary::after {
-  margin-left: auto;
+  margin-inline-start: auto;
   content: "+";
   font-size: 1.1rem;
 }
 
-.menu-data-notice[open] summary::after {
+.menu-data-notice details[open] summary::after {
   content: "−";
 }
 
-.menu-data-notice p {
+.menu-data-notice details > p {
   max-width: 70ch;
-  padding: 0 13px 13px;
+  padding: 0 var(--space-md) var(--space-md);
   margin: 0;
 }
 
 .section.all-menus {
-  padding: 42px 0;
+  padding: calc(var(--space-xl) + var(--space-lg)) 0;
   border-top: 1px solid var(--quiet-divider);
 }
 
@@ -1916,9 +2029,9 @@ body {
 .day-row summary {
   display: grid;
   min-height: 72px;
-  gap: 7px;
+  gap: var(--space-sm);
   align-items: center;
-  padding: 13px 4px;
+  padding: var(--space-md) var(--space-xs);
   cursor: pointer;
   list-style: none;
   transition: background-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -2117,6 +2230,7 @@ body {
   min-height: 46px;
   align-items: center;
   gap: 7px;
+  margin-top: 0;
   color: inherit;
   font-size: 0.86rem;
   font-weight: 760;
@@ -2299,8 +2413,28 @@ body {
 }
 
 .restaurant-meta a {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  padding-inline: var(--space-xs);
   color: var(--light-on-dark);
   text-underline-offset: 3px;
+}
+
+.restaurant-actions {
+  display: grid;
+  flex: 0 0 auto;
+  gap: var(--space-xs);
+  justify-items: stretch;
+}
+
+.restaurant-actions .button {
+  white-space: nowrap;
+}
+
+.restaurant-website-link {
+  justify-content: center;
+  color: var(--light-on-dark);
 }
 
 .week-toolbar {
@@ -2403,7 +2537,31 @@ body {
 }
 
 .day-row summary {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "title toggle"
+    "facts toggle";
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-md);
+  row-gap: var(--space-xs);
+}
+
+.day-row-title {
+  grid-area: title;
+}
+
+.day-row-title small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-row-facts {
+  grid-area: facts;
+}
+
+.day-row-toggle {
+  grid-area: toggle;
+  align-self: center;
 }
 
 .restaurant-aside {
@@ -2490,7 +2648,7 @@ body {
     transform: none;
   }
 
-  .reader-main .text-link:hover > span:last-child {
+  .reader-main .text-link:hover > span[aria-hidden="true"] {
     transform: translateX(3px);
   }
 }
@@ -2506,13 +2664,9 @@ body {
     padding-inline: 8px;
   }
 
-  .recommendation-row {
-    grid-template-columns: 24px minmax(0, 1fr) 18px;
-  }
-
-  .recommendation-row-facts {
-    grid-column: 2 / -1;
-    white-space: normal;
+  .recommendation-route-link {
+    flex-basis: 100%;
+    justify-content: flex-start;
   }
 
   .selected-day-heading,
@@ -2521,7 +2675,9 @@ body {
     flex-direction: column;
   }
 
-  .restaurant-hero .button {
+  .restaurant-actions,
+  .restaurant-hero .button,
+  .restaurant-website-link {
     width: 100%;
   }
 
@@ -2546,39 +2702,18 @@ body {
     width: min(100% - 40px, 1180px);
   }
 
-  .day-wayfinding {
-    grid-template-columns: minmax(320px, 0.7fr) minmax(0, 1fr);
-    gap: 36px;
-    align-items: end;
-    padding: 24px 0 20px;
-  }
-
-  .reader-main h1 {
-    font-size: 3.5rem;
-  }
-
   .recommendation-layout {
     grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.85fr);
-    gap: 14px;
-    align-items: stretch;
+    gap: var(--space-lg);
+    align-items: start;
   }
 
   .recommendation-card {
     padding: 24px;
   }
 
-  .recommendation-companions {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .recommendation-companions li {
-    flex: 1;
-  }
-
   .recommendation-row {
-    height: 100%;
-    padding: 16px;
+    padding: var(--space-lg);
   }
 
   .menu-row summary {
@@ -2595,18 +2730,49 @@ body {
     grid-row: auto;
   }
 
+  .selected-day {
+    padding: 24px;
+  }
+}
+
+@media (min-width: 900px) {
+  .day-wayfinding {
+    grid-template-columns: minmax(380px, 0.7fr) minmax(0, 1fr);
+    gap: 36px;
+    align-items: end;
+    padding: 24px 0 20px;
+  }
+
+  .reader-main h1 {
+    font-size: 3.5rem;
+  }
+
+  .day-row summary {
+    grid-template-areas: none;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: var(--space-lg);
+  }
+
+  .day-row-title,
+  .day-row-facts,
+  .day-row-toggle {
+    grid-area: auto;
+  }
+
+  .day-row-title small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
   .restaurant-content {
     grid-template-columns: minmax(0, 1fr) 260px;
-    gap: 22px;
+    gap: var(--space-xl);
   }
 
   .restaurant-aside {
     position: sticky;
-    top: 18px;
-  }
-
-  .selected-day {
-    padding: 24px;
+    top: var(--space-lg);
   }
 }
 
@@ -2620,7 +2786,7 @@ body {
   }
 
   .section.all-menus {
-    padding: 52px 0;
+    padding: var(--space-section) 0;
   }
 
   .restaurant-hero {

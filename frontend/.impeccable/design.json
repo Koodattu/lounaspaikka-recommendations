@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-16T07:43:47.790Z",
+  "title": "Design System: Mihin lounaalle?",
+  "extensions": {
+    "colorMeta": {
+      "signal-clay": {
+        "role": "primary",
+        "displayName": "Signal Clay",
+        "canonical": "oklch(63.8% 0.178 37.0)",
+        "tonalRamp": ["oklch(15% 0.178 37.0)", "oklch(25% 0.178 37.0)", "oklch(35% 0.178 37.0)", "oklch(45% 0.178 37.0)", "oklch(55% 0.178 37.0)", "oklch(65% 0.178 37.0)", "oklch(80% 0.178 37.0)", "oklch(95% 0.178 37.0)"]
+      },
+      "signal-clay-hover": {
+        "role": "primary",
+        "displayName": "Pressed Signal Clay",
+        "canonical": "oklch(58.1% 0.166 36.5)",
+        "tonalRamp": ["oklch(15% 0.166 36.5)", "oklch(25% 0.166 36.5)", "oklch(35% 0.166 36.5)", "oklch(45% 0.166 36.5)", "oklch(55% 0.166 36.5)", "oklch(65% 0.166 36.5)", "oklch(80% 0.166 36.5)", "oklch(95% 0.166 36.5)"]
+      },
+      "route-green": {
+        "role": "secondary",
+        "displayName": "Route Green",
+        "canonical": "oklch(39.0% 0.044 151.4)",
+        "tonalRamp": ["oklch(15% 0.044 151.4)", "oklch(25% 0.044 151.4)", "oklch(35% 0.044 151.4)", "oklch(45% 0.044 151.4)", "oklch(55% 0.044 151.4)", "oklch(65% 0.044 151.4)", "oklch(80% 0.044 151.4)", "oklch(95% 0.044 151.4)"]
+      },
+      "route-green-hover": {
+        "role": "secondary",
+        "displayName": "Deep Route Green",
+        "canonical": "oklch(34.0% 0.017 135.1)",
+        "tonalRamp": ["oklch(15% 0.017 135.1)", "oklch(25% 0.017 135.1)", "oklch(35% 0.017 135.1)", "oklch(45% 0.017 135.1)", "oklch(55% 0.017 135.1)", "oklch(65% 0.017 135.1)", "oklch(80% 0.017 135.1)", "oklch(95% 0.017 135.1)"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(25.9% 0.019 135.2)",
+        "tonalRamp": ["oklch(15% 0.019 135.2)", "oklch(25% 0.019 135.2)", "oklch(35% 0.019 135.2)", "oklch(45% 0.019 135.2)", "oklch(55% 0.019 135.2)", "oklch(65% 0.019 135.2)", "oklch(80% 0.019 135.2)", "oklch(95% 0.019 135.2)"]
+      },
+      "secondary-ink": {
+        "role": "neutral",
+        "displayName": "Secondary Ink",
+        "canonical": "oklch(53.5% 0.021 135.0)",
+        "tonalRamp": ["oklch(15% 0.021 135.0)", "oklch(25% 0.021 135.0)", "oklch(35% 0.021 135.0)", "oklch(45% 0.021 135.0)", "oklch(55% 0.021 135.0)", "oklch(65% 0.021 135.0)", "oklch(80% 0.021 135.0)", "oklch(95% 0.021 135.0)"]
+      },
+      "field-ground": {
+        "role": "neutral",
+        "displayName": "Field Ground",
+        "canonical": "oklch(95.3% 0.014 84.6)",
+        "tonalRamp": ["oklch(15% 0.014 84.6)", "oklch(25% 0.014 84.6)", "oklch(35% 0.014 84.6)", "oklch(45% 0.014 84.6)", "oklch(55% 0.014 84.6)", "oklch(65% 0.014 84.6)", "oklch(80% 0.014 84.6)", "oklch(95% 0.014 84.6)"]
+      },
+      "clear-surface": {
+        "role": "neutral",
+        "displayName": "Clear Surface",
+        "canonical": "oklch(99.4% 0.007 88.6)",
+        "tonalRamp": ["oklch(15% 0.007 88.6)", "oklch(25% 0.007 88.6)", "oklch(35% 0.007 88.6)", "oklch(45% 0.007 88.6)", "oklch(55% 0.007 88.6)", "oklch(65% 0.007 88.6)", "oklch(80% 0.007 88.6)", "oklch(95% 0.007 88.6)"]
+      },
+      "input-surface": {
+        "role": "neutral",
+        "displayName": "Input Surface",
+        "canonical": "oklch(100% 0 0)",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(25% 0 0)", "oklch(35% 0 0)", "oklch(45% 0 0)", "oklch(55% 0 0)", "oklch(65% 0 0)", "oklch(80% 0 0)", "oklch(95% 0 0)"]
+      },
+      "light-on-dark": {
+        "role": "neutral",
+        "displayName": "Light on Dark",
+        "canonical": "oklch(98.6% 0.013 82.4)",
+        "tonalRamp": ["oklch(15% 0.013 82.4)", "oklch(25% 0.013 82.4)", "oklch(35% 0.013 82.4)", "oklch(45% 0.013 82.4)", "oklch(55% 0.013 82.4)", "oklch(65% 0.013 82.4)", "oklch(80% 0.013 82.4)", "oklch(95% 0.013 82.4)"]
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "Quiet Divider",
+        "canonical": "oklch(25.9% 0.019 135.2 / 0.14)",
+        "tonalRamp": ["oklch(15% 0.019 135.2 / 0.14)", "oklch(25% 0.019 135.2 / 0.14)", "oklch(35% 0.019 135.2 / 0.14)", "oklch(45% 0.019 135.2 / 0.14)", "oklch(55% 0.019 135.2 / 0.14)", "oklch(65% 0.019 135.2 / 0.14)", "oklch(80% 0.019 135.2 / 0.14)", "oklch(95% 0.019 135.2 / 0.14)"]
+      },
+      "warning-ink": {
+        "role": "warning",
+        "displayName": "Warning Ink",
+        "canonical": "oklch(43.2% 0.076 61.9)",
+        "tonalRamp": ["oklch(15% 0.076 61.9)", "oklch(25% 0.076 61.9)", "oklch(35% 0.076 61.9)", "oklch(45% 0.076 61.9)", "oklch(55% 0.076 61.9)", "oklch(65% 0.076 61.9)", "oklch(80% 0.076 61.9)", "oklch(95% 0.076 61.9)"]
+      },
+      "warning-surface": {
+        "role": "warning",
+        "displayName": "Warning Surface",
+        "canonical": "oklch(96.3% 0.036 82.2)",
+        "tonalRamp": ["oklch(15% 0.036 82.2)", "oklch(25% 0.036 82.2)", "oklch(35% 0.036 82.2)", "oklch(45% 0.036 82.2)", "oklch(55% 0.036 82.2)", "oklch(65% 0.036 82.2)", "oklch(80% 0.036 82.2)", "oklch(95% 0.036 82.2)"]
+      },
+      "danger-ink": {
+        "role": "danger",
+        "displayName": "Danger Ink",
+        "canonical": "oklch(46.9% 0.144 28.6)",
+        "tonalRamp": ["oklch(15% 0.144 28.6)", "oklch(25% 0.144 28.6)", "oklch(35% 0.144 28.6)", "oklch(45% 0.144 28.6)", "oklch(55% 0.144 28.6)", "oklch(65% 0.144 28.6)", "oklch(80% 0.144 28.6)", "oklch(95% 0.144 28.6)"]
+      },
+      "danger-surface": {
+        "role": "danger",
+        "displayName": "Danger Surface",
+        "canonical": "oklch(96.6% 0.017 31.1)",
+        "tonalRamp": ["oklch(15% 0.017 31.1)", "oklch(25% 0.017 31.1)", "oklch(35% 0.017 31.1)", "oklch(45% 0.017 31.1)", "oklch(55% 0.017 31.1)", "oklch(65% 0.017 31.1)", "oklch(80% 0.017 31.1)", "oklch(95% 0.017 31.1)"]
+      },
+      "success-ink": {
+        "role": "success",
+        "displayName": "Success Ink",
+        "canonical": "oklch(47.5% 0.097 149.1)",
+        "tonalRamp": ["oklch(15% 0.097 149.1)", "oklch(25% 0.097 149.1)", "oklch(35% 0.097 149.1)", "oklch(45% 0.097 149.1)", "oklch(55% 0.097 149.1)", "oklch(65% 0.097 149.1)", "oklch(80% 0.097 149.1)", "oklch(95% 0.097 149.1)"]
+      },
+      "success-surface": {
+        "role": "success",
+        "displayName": "Success Surface",
+        "canonical": "oklch(96.9% 0.015 151.8)",
+        "tonalRamp": ["oklch(15% 0.015 151.8)", "oklch(25% 0.015 151.8)", "oklch(35% 0.015 151.8)", "oklch(45% 0.015 151.8)", "oklch(55% 0.015 151.8)", "oklch(65% 0.015 151.8)", "oklch(80% 0.015 151.8)", "oklch(95% 0.015 151.8)"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Reader Display",
+        "purpose": "Home-page decision headline only."
+      },
+      "headline": {
+        "displayName": "Reader Headline",
+        "purpose": "Reader section headings and restaurant names."
+      },
+      "title": {
+        "displayName": "Task Title",
+        "purpose": "Recommendation titles and admin panel headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Menus, rationales, descriptions, and instructions."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Sentence-case controls, metadata, chips, and fields."
+      },
+      "data": {
+        "displayName": "Tabular Data",
+        "purpose": "Dates, times, prices, scores, and operational counts."
+      }
+    },
+    "shadows": [
+      {
+        "name": "structural-low",
+        "value": "0 1px 2px rgba(32, 38, 29, 0.04)",
+        "purpose": "Temporary overlap, sticky controls, or a compact floating toolbar only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-out",
+        "value": "180ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Hover, focus, selected, and content-state transitions."
+      },
+      {
+        "name": "press",
+        "value": "100ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Small active-state compression without layout movement."
+      },
+      {
+        "name": "status-pulse",
+        "value": "1.1s ease-in-out infinite alternate",
+        "purpose": "Loading and running indicators only."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.01ms",
+        "purpose": "Instant fallback under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "600px"
+      },
+      {
+        "name": "stacked",
+        "value": "820px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single strongest action in a task region.",
+      "html": "<button class='ds-button-primary'>Näytä päivän lounaat</button>",
+      "css": ".ds-button-primary { min-height: 46px; padding: 11px 16px; border: 0; border-radius: 12px; background: var(--olive, #334c39); color: #fffaf1; font: 720 0.8rem/1.3 Aptos, 'Segoe UI', sans-serif; cursor: pointer; transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 100ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-button-primary:hover { background: #343a31; } .ds-button-primary:focus-visible { outline: 3px solid var(--accent, #e25a31); outline-offset: 3px; } .ds-button-primary:active { transform: scale(0.98); } .ds-button-primary:disabled { color: #fffaf1; background: #687064; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A clear alternative action without competing with the primary route.",
+      "html": "<button class='ds-button-secondary'>Yritä uudelleen</button>",
+      "css": ".ds-button-secondary { min-height: 46px; padding: 11px 16px; border: 1px solid rgba(32, 38, 29, 0.14); border-radius: 12px; background: var(--paper, #fffdf8); color: var(--ink, #20261d); font: 720 0.8rem/1.3 Aptos, 'Segoe UI', sans-serif; cursor: pointer; transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 100ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-button-secondary:hover { border-color: rgba(32, 38, 29, 0.28); background: #fff; } .ds-button-secondary:focus-visible { outline: 3px solid var(--accent, #e25a31); outline-offset: 3px; } .ds-button-secondary:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A familiar high-contrast field for operational input.",
+      "html": "<label class='ds-field'><span>Ravintolan ruokalistasivu</span><input type='url' placeholder='https://ravintola.fi/lounas'></label>",
+      "css": ".ds-field { display: grid; gap: 8px; color: var(--ink, #20261d); font: 720 0.8rem/1.3 Aptos, 'Segoe UI', sans-serif; } .ds-field input { min-height: 48px; padding: 11px 13px; border: 1px solid rgba(32, 38, 29, 0.24); border-radius: 12px; background: #fff; color: var(--ink, #20261d); font: 400 1rem/1.55 Aptos, 'Segoe UI', sans-serif; outline: none; transition: border-color 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-field input::placeholder { color: var(--muted, #687064); opacity: 1; } .ds-field input:focus-visible { border-color: var(--accent, #e25a31); box-shadow: 0 0 0 3px rgba(226, 90, 49, 0.16); } .ds-field input:disabled { border-color: rgba(32, 38, 29, 0.14); background: #f4efe5; color: #687064; cursor: not-allowed; }"
+    },
+    {
+      "name": "Date Wayfinder",
+      "kind": "nav",
+      "refersTo": "navigation-control",
+      "description": "The primary date-orientation control for the reader flow.",
+      "html": "<nav class='ds-date-wayfinder' aria-label='Päivän valinta'><button aria-label='Edellinen päivä'>←</button><div><span>Valittu päivä</span><strong>Torstai 16. heinäkuuta</strong></div><button aria-label='Seuraava päivä'>→</button></nav>",
+      "css": ".ds-date-wayfinder { display: grid; grid-template-columns: 46px 1fr 46px; gap: 8px; align-items: center; min-height: 62px; padding: 8px; border: 1px solid rgba(32, 38, 29, 0.14); border-radius: 14px; background: var(--paper, #fffdf8); color: var(--ink, #20261d); font-family: Aptos, 'Segoe UI', sans-serif; } .ds-date-wayfinder > div { display: grid; gap: 2px; text-align: center; } .ds-date-wayfinder span { font-size: 0.8rem; font-weight: 720; } .ds-date-wayfinder strong { font-size: 1rem; font-variant-numeric: tabular-nums; } .ds-date-wayfinder button { width: 46px; height: 46px; padding: 0; border: 1px solid transparent; border-radius: 12px; background: transparent; color: inherit; cursor: pointer; transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 100ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-date-wayfinder button:hover { border-color: rgba(32, 38, 29, 0.14); background: #f4efe5; } .ds-date-wayfinder button:focus-visible { outline: 3px solid var(--accent, #e25a31); outline-offset: 2px; } .ds-date-wayfinder button:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Information Chip",
+      "kind": "chip",
+      "refersTo": "information-chip",
+      "description": "A compact factual label for time, price, diet, or status.",
+      "html": "<span class='ds-information-chip'>Lounas 10.30–14</span>",
+      "css": ".ds-information-chip { display: inline-flex; min-height: 30px; align-items: center; padding: 5px 10px; border: 1px solid rgba(32, 38, 29, 0.14); border-radius: 999px; background: var(--cream, #f4efe5); color: var(--ink, #20261d); font: 720 0.8rem/1.3 Aptos, 'Segoe UI', sans-serif; white-space: nowrap; }"
+    },
+    {
+      "name": "Leading Recommendation",
+      "kind": "card",
+      "refersTo": "recommendation-primary",
+      "description": "The single visual anchor for today's strongest lunch choice.",
+      "html": "<article class='ds-leading-recommendation'><span class='ds-leading-recommendation-rank'>1. paras valinta</span><h3>Vinola</h3><p>Kuha ja raikas lisuke tekevät tästä päivän kiinnostavimman lounaan.</p><a href='#'>Katso viikon ruokalista →</a></article>",
+      "css": ".ds-leading-recommendation { display: grid; gap: 12px; padding: 24px; border: 0; border-radius: 14px; background: var(--olive, #334c39); color: #fffaf1; font-family: Aptos, 'Segoe UI', sans-serif; } .ds-leading-recommendation-rank { font-size: 0.8rem; font-weight: 720; } .ds-leading-recommendation h3 { margin: 4px 0 0; font: 600 2rem/1.05 Georgia, 'Times New Roman', serif; letter-spacing: -0.03em; } .ds-leading-recommendation p { max-width: 52ch; margin: 0; color: #fffaf1; font-size: 1rem; line-height: 1.55; } .ds-leading-recommendation a { width: fit-content; min-height: 46px; display: inline-flex; align-items: center; color: #fffaf1; font-size: 0.8rem; font-weight: 720; text-underline-offset: 4px; } .ds-leading-recommendation a:hover { text-decoration-thickness: 2px; } .ds-leading-recommendation a:focus-visible { outline: 3px solid #fffaf1; outline-offset: 3px; }"
+    },
+    {
+      "name": "Menu Reading Row",
+      "kind": "card",
+      "refersTo": "menu-reading-row",
+      "description": "A calm, aligned alternative to an identical marketplace card grid.",
+      "html": "<article class='ds-menu-row'><div><h3>Kasvisravintola</h3><p>Keskuskatu 10, Seinäjoki</p></div><div class='ds-menu-row-facts'><span>10.30–14</span><strong>Kasviscurry</strong></div></article>",
+      "css": ".ds-menu-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(10rem, 0.7fr); gap: 18px; align-items: start; padding: 18px 0; border: 0; border-top: 1px solid rgba(32, 38, 29, 0.14); background: transparent; color: var(--ink, #20261d); font-family: Aptos, 'Segoe UI', sans-serif; } .ds-menu-row h3 { margin: 0 0 4px; font-size: 1.25rem; line-height: 1.2; letter-spacing: -0.02em; } .ds-menu-row p { margin: 0; color: #687064; font-size: 0.8rem; line-height: 1.3; } .ds-menu-row-facts { display: grid; gap: 6px; justify-items: end; text-align: right; } .ds-menu-row-facts span { font-size: 0.8rem; font-variant-numeric: tabular-nums; } .ds-menu-row-facts strong { font-size: 1rem; line-height: 1.4; } @media (max-width: 600px) { .ds-menu-row { grid-template-columns: 1fr; gap: 12px; } .ds-menu-row-facts { justify-items: start; text-align: left; } }"
+    },
+    {
+      "name": "Status Strip",
+      "kind": "custom",
+      "description": "A full-border status treatment that never relies on a colored side stripe.",
+      "html": "<div class='ds-status-strip' role='status'><strong>Viimeisin päivitysyritys epäonnistui.</strong><span>Näytämme viimeksi onnistuneesti haetut tiedot.</span></div>",
+      "css": ".ds-status-strip { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; padding: 12px 14px; border: 1px solid rgba(174, 103, 27, 0.24); border-radius: 12px; background: #fff1d8; color: #6e4620; font: 400 0.88rem/1.45 Aptos, 'Segoe UI', sans-serif; } .ds-status-strip strong { font-weight: 760; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Keskipäivän opaste",
+    "overview": "Keskipäivän opaste treats the interface like a well-designed local wayfinding system at noon: crisp, direct, grounded, and high-signal. It preserves the established clay, green, and neutral identity, but every visual decision must help a Finnish-speaking reader choose lunch in under a minute.\n\nThe reader surface is mobile-first and composed for fast scanning: the current date, the leading recommendation, its rationale, and the path to the full offering must be obvious without study. Desktop adds breadth, not a different hierarchy. The admin surface uses the same palette and components at a denser rhythm, with the editorial serif removed from operational labels, controls, and data.\n\nThis system explicitly rejects the food-delivery marketplace, the generic SaaS dashboard, and the “AI-powered” novelty product. Recommendations earn trust through visible criteria, sources, freshness, and honest states; the underlying AI stays backstage.",
+    "keyCharacteristics": [
+      "Near-flat hierarchy built from solid fills, full borders, alignment, and whitespace.",
+      "Signal Clay appears rarely as an orientation cue; Route Green carries primary action and the leading choice.",
+      "Touch targets are at least 46px, with compact facts and calm reading density around them.",
+      "Public decision headlines may use Georgia; every task-oriented label, control, and data point uses Aptos or Segoe UI.",
+      "Mobile exposes the decision first; desktop increases comparison capacity without adding decoration."
+    ],
+    "rules": [
+      {
+        "name": "The One Signal Rule",
+        "body": "Signal Clay occupies no more than 10% of a screen. Its rarity is what makes it useful.",
+        "section": "colors"
+      },
+      {
+        "name": "The Route Green Action Rule",
+        "body": "Route Green is reserved for primary action, the first recommendation, and active wayfinding. Inactive states never borrow its saturation.",
+        "section": "colors"
+      },
+      {
+        "name": "The Clear Surface Rule",
+        "body": "Field Ground is the canvas and Clear Surface is the reading layer. Never stack cream-on-cream cards to manufacture hierarchy.",
+        "section": "colors"
+      },
+      {
+        "name": "The Serif Boundary Rule",
+        "body": "Georgia is permitted for public decision headlines and restaurant storytelling only. It is forbidden in buttons, chips, field labels, admin controls, tables, status messages, and operational data.",
+        "section": "typography"
+      },
+      {
+        "name": "The No Eyebrow Scaffold Rule",
+        "body": "Repeated tiny uppercase tracked labels are prohibited. Use one plain sentence-case context label when orientation genuinely requires it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Map Rule",
+        "body": "If a surface can be understood through alignment, fill, or a divider, it gets no shadow.",
+        "section": "elevation"
+      },
+      {
+        "name": "The One Decision Rule",
+        "body": "The current date and leading recommendation must be identifiable in the first mobile viewport without relying on animation.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do make the current date and leading recommendation identifiable in the first 390 × 844 viewport.",
+      "Do keep interactive targets at least 46px high and preserve visible keyboard focus.",
+      "Do use Route Green for primary action and Signal Clay only for rare orientation and state cues.",
+      "Do show ranking criteria, source, freshness, and stale or unavailable states in plain Finnish.",
+      "Do use full dividers, alignment, and 18–24px internal spacing before introducing another container.",
+      "Do keep long rationales and operational prose within 70ch.",
+      "Do use text or an icon alongside color for warning, danger, success, and selected states."
+    ],
+    "donts": [
+      "Don't resemble a food-delivery marketplace with equally promoted restaurant tiles, promotional imagery, or ordering affordances.",
+      "Don't resemble a generic SaaS dashboard with interchangeable stat cards, decorative charts, or a sidebar that does not serve a real task.",
+      "Don't resemble an “AI-powered” novelty product with gradients, glows, bot motifs, or implementation-first copy.",
+      "Don't use repeated tiny uppercase tracked eyebrows as section scaffolding.",
+      "Don't use 20–28px card radii, nested cards, or identical card grids as the default structure.",
+      "Don't combine a 1px border with the current broad 32px-blur shadow on the same resting surface.",
+      "Don't use a colored border-left or border-right thicker than 1px for notices; use a full border, state fill, icon, or leading text.",
+      "Don't use Signal Clay for small text on Field Ground or Clear Surface.",
+      "Don't add glassmorphism, gradient text, decorative grids, or motion that does not communicate state."
+    ]
+  }
+}

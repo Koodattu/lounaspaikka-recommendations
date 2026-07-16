@@ -13,14 +13,18 @@ import {
 } from "./dates";
 import type { DayResponse, Menu, Restaurant, RestaurantWeekResponse } from "./types";
 
+type RestaurantDay = RestaurantWeekResponse["days"][number];
+
 function AppHeader() {
   return (
-    <header className="app-header">
+    <header className="app-header reader-header">
       <a className="brand" href="/" aria-label="Mihin lounaalle? – etusivu">
         <span className="brand-mark" aria-hidden="true">M</span>
-        <span>Mihin lounaalle?</span>
+        <span className="brand-copy">
+          <strong>Mihin lounaalle?</strong>
+          <small>Seinäjoki · 50 km</small>
+        </span>
       </a>
-      <span className="catchment">Seinäjoki · 50 km</span>
     </header>
   );
 }
@@ -32,27 +36,43 @@ function DateNavigation({
   date: string;
   onChange: (date: string) => void;
 }) {
+  const today = todayInHelsinki();
+  const isToday = date === today;
+
   return (
-    <div className="date-navigation" aria-label="Päivän valinta">
+    <nav className="date-navigation" aria-label="Päivän valinta">
       <button type="button" aria-label="Edellinen päivä" onClick={() => onChange(addDays(date, -1))}>
         <span aria-hidden="true">←</span>
       </button>
-      <div>
-        <span className="date-label">Valittu päivä</span>
+      <div className="date-navigation-current">
+        <span className="date-context">{isToday ? "Tänään" : "Valittu päivä"}</span>
         <strong>{formatLongDate(date)}</strong>
       </div>
+      <button
+        aria-disabled={isToday}
+        aria-label={isToday ? "Tänään valittu" : "Siirry tähän päivään"}
+        className="today-button"
+        type="button"
+        onClick={isToday ? undefined : () => onChange(today)}
+      >
+        Tänään
+      </button>
       <button type="button" aria-label="Seuraava päivä" onClick={() => onChange(addDays(date, 1))}>
         <span aria-hidden="true">→</span>
       </button>
-    </div>
+    </nav>
   );
 }
 
 function LoadingState({ label = "Ruokalistoja ladataan…" }: { label?: string }) {
   return (
-    <div className="state-panel" role="status">
-      <span className="loading-dot" aria-hidden="true" />
+    <div className="state-panel reader-loading" role="status" aria-live="polite">
       <p>{label}</p>
+      <div className="loading-skeleton" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
     </div>
   );
 }
@@ -61,30 +81,76 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="state-panel state-panel-error" role="alert">
       <h2>Ruokalistoja ei saatu ladattua.</h2>
-      <p>Yritä hetken kuluttua uudelleen.</p>
+      <p>Tarkista yhteys ja yritä uudelleen.</p>
       <button className="button button-dark" type="button" onClick={onRetry}>Yritä uudelleen</button>
     </div>
   );
 }
 
-function RestaurantLink({ restaurant, date }: { restaurant: Restaurant; date: string }) {
-  const href = `/ravintolat/${encodeURIComponent(restaurant.id)}?week=${startOfWeek(date)}`;
-  return <a className="text-link" href={href}>Katso viikon ruokalista <span aria-hidden="true">→</span></a>;
+function restaurantHref(restaurant: Restaurant, date: string): string {
+  return `/ravintolat/${encodeURIComponent(restaurant.id)}?week=${startOfWeek(date)}&date=${date}`;
+}
+
+function RestaurantLink({
+  className = "",
+  label = "Katso viikon ruokalista",
+  restaurant,
+  date,
+}: {
+  className?: string;
+  label?: string;
+  restaurant: Restaurant;
+  date: string;
+}) {
+  return (
+    <a className={`text-link ${className}`.trim()} href={restaurantHref(restaurant, date)}>
+      <span>{label}</span>
+      <span aria-hidden="true">→</span>
+    </a>
+  );
+}
+
+const dietaryMarkerNames: Record<string, string> = {
+  G: "gluteeniton",
+  L: "laktoositon",
+  M: "maidoton",
+  VE: "vegaaninen",
+  VEG: "vegaaninen",
+  VL: "vähälaktoosinen",
+};
+
+function dietaryMarkerLabel(markers: string[]): string {
+  return [...new Set(markers)]
+    .map((marker) => dietaryMarkerNames[marker.toLocaleUpperCase("fi-FI")]
+      ? `${marker}, ${dietaryMarkerNames[marker.toLocaleUpperCase("fi-FI")]}`
+      : marker)
+    .join("; ");
 }
 
 function MenuContent({
-  compact = false,
+  limit,
   menu,
+  showRawText = true,
 }: {
-  compact?: boolean;
+  limit?: number;
   menu: Pick<Menu, "structuredMenu" | "text">;
+  showRawText?: boolean;
 }) {
   const courses = menu.structuredMenu?.courses ?? [];
   if (courses.length === 0) {
     if (!menu.text) return <p className="muted">Ei julkaistua ruokalistaa.</p>;
+    if (typeof limit === "number") {
+      return (
+        <>
+          <p className="menu-text">{menuPreview(menu)}</p>
+          <p className="more-courses">Koko lista avautuu viikon ruokalistasta.</p>
+        </>
+      );
+    }
     return <p className="menu-text">{menu.text}</p>;
   }
-  const visibleCourses = compact ? courses.slice(0, 6) : courses;
+  const visibleCourses = typeof limit === "number" ? courses.slice(0, limit) : courses;
+  const remainingCourseCount = courses.length - visibleCourses.length;
 
   return (
     <div className="structured-menu">
@@ -94,7 +160,10 @@ function MenuContent({
             <div className="course-line">
               <span className="course-name">{course.nameFi}</span>
               {course.dietaryMarkers.length > 0 && (
-                <span className="dietary-markers" aria-label="Ruokavaliomerkinnät">
+                <span
+                  className="dietary-markers"
+                  aria-label={`Ravintolan ilmoittamat ruokavaliomerkinnät: ${dietaryMarkerLabel(course.dietaryMarkers)}`}
+                >
                   {[...new Set(course.dietaryMarkers)].map((marker, markerIndex) => (
                     <span key={`${marker}-${markerIndex}`}>{marker}</span>
                   ))}
@@ -107,10 +176,12 @@ function MenuContent({
           </li>
         ))}
       </ul>
-      {visibleCourses.length < courses.length && (
-        <p className="more-courses">Lisäksi {courses.length - visibleCourses.length} muuta.</p>
+      {remainingCourseCount > 0 && (
+        <p className="more-courses">
+          {remainingCourseCount === 1 ? "Lisäksi yksi muu ruoka." : `Lisäksi ${remainingCourseCount} muuta.`}
+        </p>
       )}
-      {!compact && menu.text && (
+      {showRawText && typeof limit !== "number" && menu.text && (
         <details className="raw-menu">
           <summary>Alkuperäinen ruokalistateksti</summary>
           <p className="menu-text">{menu.text}</p>
@@ -120,110 +191,148 @@ function MenuContent({
   );
 }
 
+function menuPreview(menu: Pick<Menu, "structuredMenu" | "text">): string {
+  const firstCourse = menu.structuredMenu?.courses[0]?.nameFi;
+  if (firstCourse) return firstCourse;
+  const firstLine = menu.text?.split(/\r?\n/).find((line) => line.trim().length > 0);
+  return firstLine?.trim() ?? "Ei julkaistua ruokalistaa.";
+}
+
+function dayPreview(day: RestaurantDay): string {
+  if (day.text || day.structuredMenu?.courses.length) return menuPreview(day);
+  return day.status === "missing"
+    ? "Tietoja ei ole vielä haettu"
+    : "Ruokalistaa ei ole julkaistu";
+}
+
 function MenuDataNotice() {
   return (
-    <p className="menu-data-notice">
-      Ruokavalio- ja allergeenitiedot on poimittu ruokalistoista automaattisesti, ja
-      ne voivat olla virheellisiä tai puutteellisia. Jos sinulla on ruoka-allergia,
-      varmista annoksen sopivuus aina ravintolasta.
-    </p>
+    <details className="menu-data-notice">
+      <summary>Ruokavaliotiedot kannattaa tarkistaa</summary>
+      <p>
+        Ruokavalio- ja allergeenitiedot on poimittu ruokalistoista automaattisesti,
+        ja ne voivat olla virheellisiä tai puutteellisia. Jos sinulla on ruoka-allergia,
+        varmista annoksen sopivuus aina ravintolasta. Merkinnät, kuten L, G ja VE,
+        ovat ravintolan käyttämiä lyhenteitä.
+      </p>
+    </details>
   );
 }
 
 function RecommendationList({ data }: { data: DayResponse }) {
+  const primary = data.recommendations.find((recommendation) => recommendation.rank === 1)
+    ?? data.recommendations[0];
+  const companions = data.recommendations.filter((recommendation) => recommendation !== primary);
+
+  if (data.status === "pending" && !primary) {
+    return <div className="inline-state" role="status">Suosituksia arvioidaan vielä.</div>;
+  }
+  if (data.status === "unavailable" && !primary) {
+    return null;
+  }
+  if (!primary) return null;
+
+  const recommendationSource = primary.menu.source ?? data.source;
+  const recommendationUpdatedAt = data.menus.find(
+    (entry) => entry.restaurant.id === primary.restaurant.id,
+  )?.fetchedAt ?? data.lastSuccessfulFetchAt;
+
   return (
-    <section className="section" aria-labelledby="recommendations-title">
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">Suositukset</span>
-          <h2 id="recommendations-title">Päivän kolme parasta</h2>
-        </div>
-        <p>Yhteinen arvio ruokalistan kiinnostavuudesta, vaihtelusta ja hinnasta.</p>
+    <section className="recommendation-section" aria-labelledby="recommendations-title">
+      <h2 className="visually-hidden" id="recommendations-title">Päivän suositukset</h2>
+      <div className="recommendation-layout">
+        <article className="recommendation-card rank-1">
+          <span className="rank-label">1. paras valinta</span>
+          <h2>{primary.restaurant.name}</h2>
+          <p className="rationale">{primary.rationale}</p>
+          <ul className="decision-facts" aria-label="Valinnan käytännön tiedot">
+            {primary.restaurant.address && <li>{primary.restaurant.address}</li>}
+            {primary.menu.lunchHours && <li>{primary.menu.lunchHours}</li>}
+            {primary.menu.priceText && <li>{primary.menu.priceText}</li>}
+          </ul>
+          <div className="menu-preview">
+            <span className="menu-preview-label">Ruokalistalta</span>
+            <MenuContent limit={1} menu={primary.menu} showRawText={false} />
+          </div>
+          <RestaurantLink
+            className="recommendation-primary-link"
+            restaurant={primary.restaurant}
+            date={data.serviceDate}
+          />
+        </article>
+
+        {companions.length > 0 && (
+          <ol className="recommendation-companions" start={2}>
+            {companions.map((recommendation) => (
+              <li key={recommendation.restaurant.id}>
+                <a className="recommendation-row" href={restaurantHref(recommendation.restaurant, data.serviceDate)}>
+                  <span className="rank-number">{recommendation.rank}</span>
+                  <span className="recommendation-row-main">
+                    <strong>{recommendation.restaurant.name}</strong>
+                    {recommendation.restaurant.address && <small>{recommendation.restaurant.address}</small>}
+                  </span>
+                  <span className="recommendation-row-facts">
+                    {[recommendation.menu.lunchHours, recommendation.menu.priceText].filter(Boolean).join(" · ")}
+                  </span>
+                  <span aria-hidden="true">→</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        )}
       </div>
 
-      {data.status === "pending" && (
-        <div className="inline-state" role="status">Suosituksia arvioidaan vielä.</div>
-      )}
-      {data.status === "unavailable" && (
-        <div className="inline-state">Tälle päivälle ei löytynyt julkaistuja lounaslistoja.</div>
-      )}
-      {data.recommendations.length > 0 && (
-        <ol className="recommendation-grid">
-          {data.recommendations.map((recommendation) => (
-            <li
-              className={`recommendation-card rank-${recommendation.rank}`}
-              key={recommendation.restaurant.id}
-            >
-              <div className="card-topline">
-                <span className="rank-badge">#{recommendation.rank}</span>
-                <span
-                  className="score"
-                  aria-label={`Pisteet ${recommendation.score.toLocaleString("fi-FI")} / 10`}
-                >
-                  {recommendation.score.toLocaleString("fi-FI", { maximumFractionDigits: 1 })}
-                  <small>/10</small>
-                </span>
-              </div>
-              <h3>{recommendation.restaurant.name}</h3>
-              <p className="rationale">{recommendation.rationale}</p>
-              <div className="menu-preview">
-                <MenuContent compact menu={recommendation.menu} />
-                <div className="menu-facts">
-                  {recommendation.menu.lunchHours && (
-                    <span className="hours">Lounas {recommendation.menu.lunchHours}</span>
-                  )}
-                  {recommendation.menu.priceText && (
-                    <span className="hours">{recommendation.menu.priceText}</span>
-                  )}
-                </div>
-                {recommendation.menu.source && (
-                  <p className="menu-source">
-                    Lähde: <a href={recommendation.menu.source.url} target="_blank" rel="noreferrer">{recommendation.menu.source.name}</a>
-                  </p>
-                )}
-              </div>
-              <RestaurantLink restaurant={recommendation.restaurant} date={data.serviceDate} />
-            </li>
-          ))}
-        </ol>
-      )}
+      <div className="recommendation-trust" aria-label="Suositusten perusteet ja päivitys">
+        <span>Arvio: kiinnostavuus, vaihtelu ja hinta</span>
+        {recommendationUpdatedAt && <span>Päivitetty {formatUpdatedAt(recommendationUpdatedAt)}</span>}
+        <span>
+          Ykkösvalinnan lähde: <a href={recommendationSource.url} target="_blank" rel="noreferrer">{recommendationSource.name}</a>
+        </span>
+      </div>
     </section>
   );
 }
 
 function AllMenus({ data }: { data: DayResponse }) {
   return (
-    <section className="section" aria-labelledby="all-menus-title">
-      <div className="section-heading compact-heading">
+    <section className="section all-menus" aria-labelledby="all-menus-title">
+      <header className="section-heading compact-heading">
         <div>
-          <span className="eyebrow">Koko tarjonta</span>
-          <h2 id="all-menus-title">Kaikki päivän ruokalistat</h2>
+          <p className="reader-context">Koko tarjonta</p>
+          <h2 id="all-menus-title">Kaikki päivän lounaat</h2>
         </div>
-        <span className="result-count">{data.menus.length} ravintolaa</span>
-      </div>
+        <span className="result-count">
+          {data.menus.length} {data.menus.length === 1 ? "ravintola" : "ravintolaa"}
+        </span>
+      </header>
       {data.menus.length === 0 ? (
         <div className="inline-state">Ruokalistoja ei ole julkaistu tälle päivälle.</div>
       ) : (
-        <ul className="menu-grid">
+        <ul className="menu-list">
           {data.menus.map((entry) => (
-            <li className="menu-card" key={entry.restaurant.id}>
-              <div className="menu-card-heading">
-                <div>
-                  <h3>{entry.restaurant.name}</h3>
-                  {entry.restaurant.address && <p>{entry.restaurant.address}</p>}
+            <li key={entry.restaurant.id}>
+              <details className="menu-row">
+                <summary>
+                  <span className="menu-row-restaurant">
+                    <strong>{entry.restaurant.name}</strong>
+                    {entry.restaurant.address && <small>{entry.restaurant.address}</small>}
+                  </span>
+                  <span className="menu-row-preview">{menuPreview(entry.menu)}</span>
+                  <span className="menu-row-facts">
+                    {[entry.menu.lunchHours, entry.menu.priceText].filter(Boolean).join(" · ")}
+                  </span>
+                  <span className="menu-row-toggle">Ruokalista</span>
+                </summary>
+                <div className="menu-row-body">
+                  <MenuContent menu={entry.menu} />
+                  {entry.menu.source && (
+                    <p className="menu-source">
+                      Lähde: <a href={entry.menu.source.url} target="_blank" rel="noreferrer">{entry.menu.source.name}</a>
+                    </p>
+                  )}
+                  <RestaurantLink restaurant={entry.restaurant} date={data.serviceDate} />
                 </div>
-                <div className="menu-facts">
-                  {entry.menu.lunchHours && <span className="hours">{entry.menu.lunchHours}</span>}
-                  {entry.menu.priceText && <span className="hours">{entry.menu.priceText}</span>}
-                </div>
-              </div>
-              <MenuContent menu={entry.menu} />
-              {entry.menu.source && (
-                <p className="menu-source">
-                  Lähde: <a href={entry.menu.source.url} target="_blank" rel="noreferrer">{entry.menu.source.name}</a>
-                </p>
-              )}
-              <RestaurantLink restaurant={entry.restaurant} date={data.serviceDate} />
+              </details>
             </li>
           ))}
         </ul>
@@ -267,17 +376,35 @@ function DayPage() {
     setDate(nextDate);
   }
 
+  const isToday = date === todayInHelsinki();
+  const hasRecommendation = Boolean(data?.recommendations.length);
+  const dayContext = hasRecommendation
+    ? isToday ? "Päivän suositus" : "Valitun päivän suositus"
+    : data?.status === "pending"
+      ? "Suositus valmistuu"
+      : data?.status === "unavailable"
+        ? "Ei julkaistuja listoja"
+        : "Päivän lounaat";
+  const dayTitle = hasRecommendation
+    ? isToday ? "Tänään kannattaa mennä tänne." : "Päivän paras lounas ensin."
+    : data?.status === "unavailable"
+      ? "Tälle päivälle ei löytynyt lounaslistoja."
+      : error
+        ? "Päivän lounaat."
+        : data?.status === "pending"
+          ? "Päivän lounaat ovat jo nähtävissä."
+          : "Päivän lounaita haetaan.";
+
   return (
     <>
       <AppHeader />
-      <main>
-        <section className="day-hero">
-          <div className="hero-copy">
-            <span className="eyebrow">Lounaat Seinäjoen seudulta</span>
-            <h1>Poimi päivän paras lounas.</h1>
-            <p>Kaikki 50 kilometrin säteellä julkaistut lounaat, yksi selkeä top 3.</p>
-          </div>
+      <main className="reader-main">
+        <section className="day-wayfinding" aria-labelledby="day-title">
           <DateNavigation date={date} onChange={changeDate} />
+          <header className="decision-heading">
+            <p className="reader-context">{dayContext}</p>
+            <h1 id="day-title">{dayTitle}</h1>
+          </header>
         </section>
 
         {error && <ErrorState onRetry={() => setRetry((value) => value + 1)} />}
@@ -286,7 +413,7 @@ function DayPage() {
           <>
             {data.stale && (
               <div className="stale-notice" role="status">
-                <strong>Viimeisin päivitysyritys epäonnistui.</strong>
+                <strong>Ruokalistojen päivitys viivästyi.</strong>
                 <span>
                   {data.lastSuccessfulFetchAt
                     ? "Näytämme viimeksi onnistuneesti haetut tiedot."
@@ -296,17 +423,14 @@ function DayPage() {
             )}
             {!(data.stale && data.lastSuccessfulFetchAt === null) && (
               <>
+                <RecommendationList data={data} />
                 {data.menus.some((entry) => entry.menu.structuredMenu?.courses.length) && (
                   <MenuDataNotice />
                 )}
-                <RecommendationList data={data} />
-                <AllMenus data={data} />
+                {data.menus.length > 0 && <AllMenus data={data} />}
               </>
             )}
-            <SourceFooter
-              source={data.source}
-              updatedAt={data.lastSuccessfulFetchAt}
-            />
+            <SourceFooter source={data.source} updatedAt={data.lastSuccessfulFetchAt} />
           </>
         )}
       </main>
@@ -341,66 +465,124 @@ const weekdayNames: Record<string, string> = {
   WE: "Ke",
 };
 
+function restaurantRouteState(search: string): { selectedDate: string; week: string } {
+  const params = new URLSearchParams(search);
+  const today = todayInHelsinki();
+  const dateParam = params.get("date");
+  const weekParam = params.get("week");
+
+  if (isIsoDate(dateParam)) {
+    return { selectedDate: dateParam, week: startOfWeek(dateParam) };
+  }
+
+  const week = isIsoDate(weekParam) ? startOfWeek(weekParam) : startOfWeek(today);
+  const selectedDate = startOfWeek(today) === week ? today : week;
+  return { selectedDate, week };
+}
+
+function EmptyDayMessage({ day }: { day: RestaurantDay }) {
+  return (
+    <p className="muted">
+      {day.status === "missing"
+        ? "Tietoja ei ole vielä haettu tälle päivälle."
+        : "Ruokalistaa ei ole julkaistu."}
+    </p>
+  );
+}
+
+function DayMenu({ day }: { day: RestaurantDay }) {
+  return day.text || day.structuredMenu?.courses.length
+    ? <MenuContent menu={day} />
+    : <EmptyDayMessage day={day} />;
+}
+
 function RestaurantPage({ restaurantId }: { restaurantId: string }) {
-  const [week, setWeek] = useState(() => {
-    const initialWeek = new URLSearchParams(window.location.search).get("week");
-    return isIsoDate(initialWeek)
-      ? startOfWeek(initialWeek)
-      : startOfWeek(todayInHelsinki());
-  });
+  const initialState = restaurantRouteState(window.location.search);
+  const [week, setWeek] = useState(initialState.week);
+  const [selectedDate, setSelectedDate] = useState(initialState.selectedDate);
   const [data, setData] = useState<RestaurantWeekResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    setData(null);
+    setLoading(true);
     setError(false);
     fetchJson<RestaurantWeekResponse>(
       `/api/restaurants/${encodeURIComponent(restaurantId)}/weeks/${week}`,
       controller.signal,
     )
-      .then(setData)
+      .then((response) => {
+        setData(response);
+        setLoading(false);
+      })
       .catch((requestError: unknown) => {
-        if (!(requestError instanceof DOMException && requestError.name === "AbortError")) setError(true);
+        if (!(requestError instanceof DOMException && requestError.name === "AbortError")) {
+          setError(true);
+          setLoading(false);
+        }
       });
     return () => controller.abort();
   }, [restaurantId, retry, week]);
 
   useEffect(() => {
     const syncWeek = () => {
-      const nextWeek = new URLSearchParams(window.location.search).get("week");
-      setWeek(
-        isIsoDate(nextWeek) ? startOfWeek(nextWeek) : startOfWeek(todayInHelsinki()),
-      );
+      const routeState = restaurantRouteState(window.location.search);
+      setWeek(routeState.week);
+      setSelectedDate(routeState.selectedDate);
     };
     window.addEventListener("popstate", syncWeek);
     return () => window.removeEventListener("popstate", syncWeek);
   }, []);
 
-  function changeWeek(nextWeek: string) {
+  function changeWeek(amount: number) {
+    const nextWeek = addDays(week, amount);
+    const nextDate = addDays(selectedDate, amount);
     window.history.pushState(
       {},
       "",
-      `/ravintolat/${encodeURIComponent(restaurantId)}?week=${nextWeek}`,
+      `/ravintolat/${encodeURIComponent(restaurantId)}?week=${nextWeek}&date=${nextDate}`,
     );
     setWeek(nextWeek);
+    setSelectedDate(nextDate);
   }
+
+  function goToToday() {
+    const today = todayInHelsinki();
+    const todayWeek = startOfWeek(today);
+    window.history.pushState(
+      {},
+      "",
+      `/ravintolat/${encodeURIComponent(restaurantId)}?week=${todayWeek}&date=${today}`,
+    );
+    setWeek(todayWeek);
+    setSelectedDate(today);
+  }
+
+  const activeDay = data
+    ? data.days.find((day) => day.serviceDate === selectedDate)
+      ?? data.days.find((day) => day.status === "published")
+      ?? data.days[0]
+    : undefined;
+  const otherDays = data && activeDay
+    ? data.days.filter((day) => day.serviceDate !== activeDay.serviceDate)
+    : [];
+  const returnDate = selectedDate;
+  const today = todayInHelsinki();
 
   return (
     <>
       <AppHeader />
-      <main>
-        <a className="back-link" href={`/?date=${todayInHelsinki()}`}>
-          <span aria-hidden="true">←</span> Päivän suosituksiin
+      <main className="reader-main restaurant-page">
+        <a className="back-link" href={`/?date=${returnDate}`}>
+          <span aria-hidden="true">←</span>
+          <span>{formatLongDate(returnDate)} · suosituksiin</span>
         </a>
-        {error && <ErrorState onRetry={() => setRetry((value) => value + 1)} />}
-        {!error && !data && <LoadingState label="Ravintolan ruokalistaa ladataan…" />}
         {data && (
-          <>
             <section className="restaurant-hero">
               <div>
-                <span className="eyebrow">Ravintola</span>
+                <p className="restaurant-context">Ravintola</p>
                 <h1>{data.restaurant.name}</h1>
                 {data.restaurant.description && <p>{data.restaurant.description}</p>}
                 <div className="restaurant-meta">
@@ -410,7 +592,7 @@ function RestaurantPage({ restaurantId }: { restaurantId: string }) {
               </div>
               {data.restaurant.websiteUrl && (
                 <a
-                  className="button button-accent"
+                  className="button button-light"
                   href={data.restaurant.websiteUrl}
                   target="_blank"
                   rel="noreferrer"
@@ -419,67 +601,96 @@ function RestaurantPage({ restaurantId }: { restaurantId: string }) {
                 </a>
               )}
             </section>
+        )}
 
-            <div className="week-toolbar">
-              <button type="button" aria-label="Edellinen viikko" onClick={() => changeWeek(addDays(week, -7))}>←</button>
-              <div>
-                <span className="date-label">Viikko</span>
-                <strong>{formatShortDate(data.weekStart)}–{formatShortDate(data.weekEnd)}</strong>
-              </div>
-              <button type="button" aria-label="Seuraava viikko" onClick={() => changeWeek(addDays(week, 7))}>→</button>
-            </div>
+        <nav className="week-toolbar" aria-label="Viikon valinta" aria-busy={loading}>
+          <button type="button" aria-label="Edellinen viikko" onClick={() => changeWeek(-7)}>←</button>
+          <div>
+            <span className="date-context">Viikko</span>
+            <strong>{formatShortDate(week)}–{formatShortDate(addDays(week, 6))}</strong>
+          </div>
+          <button
+            aria-disabled={selectedDate === today}
+            aria-label={selectedDate === today ? "Tänään valittu" : "Siirry tähän päivään"}
+            className="today-button"
+            type="button"
+            onClick={selectedDate === today ? undefined : goToToday}
+          >
+            Tänään
+          </button>
+          <button type="button" aria-label="Seuraava viikko" onClick={() => changeWeek(7)}>→</button>
+        </nav>
+
+        {error && <ErrorState onRetry={() => setRetry((value) => value + 1)} />}
+        {loading && <LoadingState label="Ravintolan ruokalistaa ladataan…" />}
+        {!loading && !error && data && activeDay && (
+          <>
 
             <section className="restaurant-content" aria-labelledby="week-menu-title">
+              <h2 className="visually-hidden" id="week-menu-title">Viikon ruokalista</h2>
               <div className="week-main">
-                <div className="section-heading compact-heading">
-                  <div>
-                    <span className="eyebrow">Maanantai–sunnuntai</span>
-                    <h2 id="week-menu-title">Viikon ruokalista</h2>
-                  </div>
-                </div>
+                <article className="selected-day">
+                  <header className="selected-day-heading">
+                    <div>
+                      <span className="selection-label">Valittu päivä</span>
+                      <h2>{formatLongDate(activeDay.serviceDate)}</h2>
+                    </div>
+                    <div className="menu-facts">
+                      {activeDay.lunchHours && <span className="hours">{activeDay.lunchHours}</span>}
+                      {activeDay.priceText && <span className="hours">{activeDay.priceText}</span>}
+                    </div>
+                  </header>
+                  <DayMenu day={activeDay} />
+                </article>
+
                 {data.days.some((day) => day.structuredMenu?.courses.length) && (
                   <MenuDataNotice />
                 )}
-                <div className="week-grid">
-                  {data.days.map((day) => (
-                    <article className={`day-card ${day.status !== "published" ? "day-card-empty" : ""}`} key={day.serviceDate}>
-                      <div className="day-card-heading">
-                        <h3>{formatLongDate(day.serviceDate)}</h3>
-                        <div className="menu-facts">
-                          {day.lunchHours && <span className="hours">{day.lunchHours}</span>}
-                          {day.priceText && <span className="hours">{day.priceText}</span>}
-                        </div>
-                      </div>
-                      {day.text ? (
-                        <MenuContent menu={day} />
-                      ) : (
-                        <p className="muted">
-                          {day.status === "missing"
-                            ? "Tietoja ei ole vielä haettu tälle päivälle."
-                            : "Ruokalistaa ei ole julkaistu."}
-                        </p>
-                      )}
-                    </article>
-                  ))}
-                </div>
+
+                <section className="other-days" aria-labelledby="other-days-title">
+                  <h2 id="other-days-title">Muut viikon päivät</h2>
+                  <div className="week-list">
+                    {otherDays.map((day) => (
+                      <details className="day-row" key={day.serviceDate}>
+                        <summary>
+                          <span className="day-row-title">
+                            <strong>{formatLongDate(day.serviceDate)}</strong>
+                            <small>{dayPreview(day)}</small>
+                          </span>
+                          <span className="day-row-facts">
+                            {[day.lunchHours, day.priceText].filter(Boolean).join(" · ")}
+                          </span>
+                          <span className="day-row-toggle">Päivän lista</span>
+                        </summary>
+                        <div className="day-row-body"><DayMenu day={day} /></div>
+                      </details>
+                    ))}
+                  </div>
+                </section>
               </div>
 
-              {data.restaurant.openingHours.length > 0 && (
-                <aside className="opening-hours">
-                  <span className="eyebrow">Aukioloajat</span>
-                  <h2>Ravintola avoinna</h2>
-                  <dl>
-                    {data.restaurant.openingHours.map((day) => (
-                      <div key={day.weekday}>
-                        <dt>{weekdayNames[day.weekday] ?? day.weekday}</dt>
-                        <dd>{day.periods.map((period) => `${period.open}–${period.close}`).join(", ")}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </aside>
-              )}
+              <aside className="restaurant-aside">
+                {data.restaurant.openingHours.length > 0 && (
+                  <section className="opening-hours">
+                    <h2>Aukioloajat</h2>
+                    <dl>
+                      {data.restaurant.openingHours.map((day) => (
+                        <div key={day.weekday}>
+                          <dt>{weekdayNames[day.weekday] ?? day.weekday}</dt>
+                          <dd>{day.periods.map((period) => `${period.open}–${period.close}`).join(", ")}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                )}
+                <section className="restaurant-provenance">
+                  <h2>Lähde ja päivitys</h2>
+                  <p><a href={data.source.url} target="_blank" rel="noreferrer">{data.source.name}</a></p>
+                  {activeDay.fetchedAt && <p>Päivitetty {formatUpdatedAt(activeDay.fetchedAt)}</p>}
+                </section>
+              </aside>
             </section>
-            <SourceFooter source={data.source} updatedAt={data.days.find((day) => day.fetchedAt)?.fetchedAt ?? null} />
+            <SourceFooter source={data.source} updatedAt={activeDay.fetchedAt} />
           </>
         )}
       </main>

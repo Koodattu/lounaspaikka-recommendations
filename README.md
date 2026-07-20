@@ -10,6 +10,7 @@ The first version is intentionally narrow: no user accounts, personalization, qu
 - An admin can add a public HTTPS restaurant page that is missing from Lounaspaikka. Its menu must be present in the static page text; PDF menus and browser-rendered pages are not supported. The page is extracted into the same dated menu structure and refreshed with the normal daily run.
 - Identical menus create a new freshness observation, not a duplicate revision. Changed menus remain available as immutable history.
 - When `OPENAI_API_KEY` is set, it extracts custom menu pages and assesses only unseen menu revisions. The model sees menu facts without restaurant identity and returns four conservatively calibrated 0–10 scores plus one short Finnish recommendation rationale.
+- OpenAI calls have separate hard request budgets for each startup/scheduled refresh and each admin source-add action. Cached custom-page extractions do not consume budget, and setting a budget to zero blocks calls for that operation.
 - Ranking is deterministic: appeal 35%, distinctiveness 25%, variety 20%, and value 20%. Ties are ordered by restaurant ID.
 - The admin can label recent immutable assessments as too high or too low. Labels are stored for shared-profile calibration and never act as hidden restaurant penalties or immediate ranking overrides.
 - The reader UI is Finnish. OpenAI instructions and all code are English; model rationales are Finnish.
@@ -74,7 +75,9 @@ Dates use `YYYY-MM-DD`. Restaurant weeks must start on a Monday.
 | `ADMIN_PASSWORD` | empty | Enables `/admin`; must contain at least 16 characters. |
 | `DATABASE_PATH` | `data/lunch.sqlite` | SQLite file path; Compose sets `/data/lunch.sqlite`. |
 | `OPENAI_API_KEY` | empty | Enables custom page extraction, assessment, and top-three generation. |
+| `OPENAI_ADMIN_SOURCE_REQUEST_BUDGET` | `20` | Maximum OpenAI requests for one admin source-add action; `0` blocks them. |
 | `OPENAI_MODEL` | `gpt-5.4-nano` | Model used for structured extraction and assessment. Changing it creates new provenance. |
+| `OPENAI_REFRESH_REQUEST_BUDGET` | `100` | Maximum OpenAI requests shared by one startup or scheduled refresh; `0` blocks them. |
 | `PORT` | `3000` | Backend HTTP port. |
 | `SITE_ADDRESS` | `http://localhost` | Caddy site address and production hostname. |
 

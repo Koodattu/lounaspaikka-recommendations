@@ -7,6 +7,10 @@ import { createServer } from "./http-app.js";
 import { ingestLunchDay } from "./ingestion.js";
 import { createOpenAiAssessor } from "./openai-assessor.js";
 import { createOpenAiMenuExtractor } from "./openai-menu-extractor.js";
+import {
+  OpenAiRequestBudget,
+  parseOpenAiRequestBudget,
+} from "./openai-request-budget.js";
 import { createMenuPageFetcher } from "./page-fetcher.js";
 import { assessAndRankDay } from "./recommendations.js";
 import {
@@ -19,6 +23,16 @@ import { createLounaspaikkaClient } from "./source.js";
 async function start(): Promise<void> {
   const databasePath = resolve(process.env.DATABASE_PATH ?? "data/lunch.sqlite");
   const model = process.env.OPENAI_MODEL ?? "gpt-5.4-nano";
+  const adminOpenAiRequestBudget = parseOpenAiRequestBudget(
+    "OPENAI_ADMIN_SOURCE_REQUEST_BUDGET",
+    process.env.OPENAI_ADMIN_SOURCE_REQUEST_BUDGET,
+    20,
+  );
+  const refreshOpenAiRequestBudget = parseOpenAiRequestBudget(
+    "OPENAI_REFRESH_REQUEST_BUDGET",
+    process.env.OPENAI_REFRESH_REQUEST_BUDGET,
+    100,
+  );
   const port = Number.parseInt(process.env.PORT ?? "3000", 10);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error("PORT must be an integer between 1 and 65535");
@@ -40,13 +54,15 @@ async function start(): Promise<void> {
     : null;
   const coordinator = createRefreshCoordinator({
     async afterDates(serviceDates) {
-      await customSourceService?.crawlAll(serviceDates);
+      const budget = new OpenAiRequestBudget(refreshOpenAiRequestBudget);
+      await customSourceService?.crawlAll(serviceDates, budget);
       if (!assessor) return;
       let firstError: unknown;
       for (const serviceDate of serviceDates) {
         try {
           const recommendations = await assessAndRankDay({
             assessor,
+            budget,
             db,
             serviceDate,
             versions: { model },
@@ -77,12 +93,14 @@ async function start(): Promise<void> {
     addCustomSource: customSourceService
       ? async (url) => {
           const serviceDates = datesToRefresh(new Date());
-          const result = await customSourceService.addAndCrawl(url, serviceDates);
+          const budget = new OpenAiRequestBudget(adminOpenAiRequestBudget);
+          const result = await customSourceService.addAndCrawl(url, serviceDates, budget);
           if (assessor) {
             for (const serviceDate of serviceDates) {
               try {
                 await assessAndRankDay({
                   assessor,
+                  budget,
                   db,
                   serviceDate,
                   versions: { model },

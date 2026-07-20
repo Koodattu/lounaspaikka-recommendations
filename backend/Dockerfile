@@ -26,6 +26,8 @@ COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY backend/package.json ./backend/package.json
 COPY --from=build /app/backend/dist ./backend/dist
 
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 RUN mkdir /data && chown node:node /data
 USER node
 

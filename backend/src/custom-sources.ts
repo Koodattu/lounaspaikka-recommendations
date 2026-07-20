@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import { z } from "zod";
 
 import { parseIsoDate } from "./dates.js";
+import type { OpenAiRequestBudget } from "./openai-request-budget.js";
 import {
   persistFailedFetch,
   persistSuccessfulFetch,
@@ -51,6 +52,7 @@ export interface MenuExtractorResult {
 }
 
 export type MenuExtractor = (request: {
+  budget?: OpenAiRequestBudget;
   pageText: string;
   serviceDates: string[];
   url: string;
@@ -216,8 +218,12 @@ function ensureSource(db: Database.Database, url: string, createdAt: string): Cu
 }
 
 export function createCustomSourceService(options: CustomSourceServiceOptions): {
-  addAndCrawl: (url: string, serviceDates: string[]) => Promise<CrawlResult>;
-  crawlAll: (serviceDates: string[]) => Promise<void>;
+  addAndCrawl: (
+    url: string,
+    serviceDates: string[],
+    budget?: OpenAiRequestBudget,
+  ) => Promise<CrawlResult>;
+  crawlAll: (serviceDates: string[], budget?: OpenAiRequestBudget) => Promise<void>;
 } {
   const now = options.now ?? (() => new Date());
   const promptVersion = options.promptVersion ?? "custom-menu-v1";
@@ -225,6 +231,7 @@ export function createCustomSourceService(options: CustomSourceServiceOptions): 
   async function crawlSource(
     source: CustomSourceRow,
     serviceDates: string[],
+    budget?: OpenAiRequestBudget,
   ): Promise<CrawlResult> {
     validateServiceDates(serviceDates);
     const startedAt = now().toISOString();
@@ -273,6 +280,7 @@ export function createCustomSourceService(options: CustomSourceServiceOptions): 
         extractorResult = { extraction };
       } else {
         extractorResult = await options.extractor({
+          budget,
           pageText: fetchedPage.text,
           serviceDates,
           url: source.url,
@@ -382,19 +390,19 @@ export function createCustomSourceService(options: CustomSourceServiceOptions): 
   }
 
   return {
-    async addAndCrawl(url, serviceDates) {
+    async addAndCrawl(url, serviceDates, budget) {
       validateServiceDates(serviceDates);
       const source = ensureSource(options.db, normalizeCustomSourceUrl(url), now().toISOString());
-      return crawlSource(source, serviceDates);
+      return crawlSource(source, serviceDates, budget);
     },
-    async crawlAll(serviceDates) {
+    async crawlAll(serviceDates, budget) {
       validateServiceDates(serviceDates);
       const sources = options.db
         .prepare("SELECT id, url FROM custom_sources WHERE enabled = 1 ORDER BY id")
         .all() as CustomSourceRow[];
       for (const source of sources) {
         try {
-          await crawlSource(source, serviceDates);
+          await crawlSource(source, serviceDates, budget);
         } catch {
           // The persisted run error is exposed in the admin overview.
         }

@@ -2,6 +2,7 @@ import { lookup as dnsLookup } from "node:dns/promises";
 import { Agent, request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 
+import { readBoundedResponseBody } from "./bounded-response.js";
 import { htmlToText } from "./html.js";
 
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
@@ -118,36 +119,6 @@ function isPublicIp(address: string): boolean {
     normalized.startsWith("ff") ||
     normalized.startsWith("2001:db8:")
   );
-}
-
-async function readBody(response: Response, maxBytes: number): Promise<Uint8Array> {
-  const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw new PageFetchError("Menu page response is too large", "invalid_response", response.status);
-  }
-  if (!response.body) return new Uint8Array();
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-      throw new PageFetchError("Menu page response is too large", "invalid_response", response.status);
-    }
-    chunks.push(value);
-  }
-
-  const body = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return body;
 }
 
 function responseHeaders(headers: Record<string, string | string[] | undefined>): Headers {
@@ -327,7 +298,15 @@ export function createMenuPageFetcher(options: MenuPageFetcherOptions = {}) {
           );
         }
 
-        const bytes = await readBody(response, maxBytes);
+        const bytes = await readBoundedResponseBody(
+          response,
+          maxBytes,
+          () => new PageFetchError(
+            "Menu page response is too large",
+            "invalid_response",
+            response.status,
+          ),
+        );
         const body = new TextDecoder().decode(bytes);
         const lowerBody = body.toLowerCase();
         if (challengeMarkers.some((marker) => lowerBody.includes(marker))) {

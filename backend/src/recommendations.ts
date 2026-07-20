@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import { z } from "zod";
 
+import type { OpenAiRequestBudget } from "./openai-request-budget.js";
+
 const scoreSchema = z.number().min(0).max(10);
 export const structuredMenuSchema = z.object({
   courses: z.array(
@@ -49,6 +51,7 @@ export interface AssessmentOffering {
 }
 
 export interface AssessmentRequest {
+  budget?: OpenAiRequestBudget;
   offerings: AssessmentOffering[];
   serviceDate: string;
 }
@@ -73,6 +76,7 @@ export interface RecommendationVersions {
 
 interface AssessAndRankDayOptions {
   assessor: Assessor;
+  budget?: OpenAiRequestBudget;
   db: Database.Database;
   now?: () => Date;
   serviceDate: string;
@@ -248,6 +252,7 @@ export async function assessAndRankDay(
     `);
     for (const offering of unseen) {
       const rawOutput = await options.assessor({
+        budget: options.budget,
         offerings: [
           {
             lunchHours: offering.lunch_hours,

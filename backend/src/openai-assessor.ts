@@ -56,13 +56,18 @@ export function createOpenAiAssessor(options: OpenAiAssessorOptions): Assessor {
   const model = options.model ?? "gpt-5.4-nano";
   const client =
     options.client ??
-    (new OpenAI({ apiKey: options.apiKey }) as unknown as OpenAiClientLike);
+    (new OpenAI({
+      apiKey: options.apiKey,
+      maxRetries: 0,
+      timeout: 60_000,
+    }) as unknown as OpenAiClientLike);
 
   return async (request: AssessmentRequest) => {
     if (request.offerings.length !== 1) {
       throw new Error("OpenAI assessor expects exactly one offering");
     }
     const offering = request.offerings[0]!;
+    request.budget?.consume();
     const response = await client.responses.parse({
       input: JSON.stringify({
         offering: {

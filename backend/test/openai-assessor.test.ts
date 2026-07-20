@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createOpenAiAssessor } from "../src/openai-assessor.js";
+import { OpenAiRequestBudget } from "../src/openai-request-budget.js";
 
 describe("OpenAI lunch assessor", () => {
   it("uses structured output with English instructions and short Finnish rationales", async () => {
@@ -104,5 +105,54 @@ describe("OpenAI lunch assessor", () => {
       }),
     ).rejects.toThrow("exactly one offering");
     expect(parse).not.toHaveBeenCalled();
+  });
+
+  it("does not call OpenAI after the request budget is exhausted", async () => {
+    const parse = vi.fn();
+    const assessor = createOpenAiAssessor({
+      apiKey: "test-key",
+      client: { responses: { parse } },
+    });
+
+    await expect(
+      assessor({
+        budget: new OpenAiRequestBudget(0),
+        offerings: [{
+          lunchHours: null,
+          menuText: "Keitto",
+          priceText: null,
+          restaurantId: "a",
+          restaurantName: "A",
+          revisionId: 1,
+        }],
+        serviceDate: "2026-07-14",
+      }),
+    ).rejects.toThrow("budget");
+    expect(parse).not.toHaveBeenCalled();
+  });
+
+  it("consumes a request even when OpenAI rejects it", async () => {
+    const budget = new OpenAiRequestBudget(1);
+    const parse = vi.fn().mockRejectedValue(new Error("provider unavailable"));
+    const assessor = createOpenAiAssessor({
+      apiKey: "test-key",
+      client: { responses: { parse } },
+    });
+
+    await expect(
+      assessor({
+        budget,
+        offerings: [{
+          lunchHours: null,
+          menuText: "Keitto",
+          priceText: null,
+          restaurantId: "a",
+          restaurantName: "A",
+          revisionId: 1,
+        }],
+        serviceDate: "2026-07-14",
+      }),
+    ).rejects.toThrow("provider unavailable");
+    expect(budget).toMatchObject({ remaining: 0, used: 1 });
   });
 });

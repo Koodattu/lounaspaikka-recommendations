@@ -42,9 +42,14 @@ export function createOpenAiMenuExtractor(options: OpenAiMenuExtractorOptions): 
   const model = options.model ?? "gpt-5.4-nano";
   const client =
     options.client ??
-    (new OpenAI({ apiKey: options.apiKey }) as unknown as OpenAiClientLike);
+    (new OpenAI({
+      apiKey: options.apiKey,
+      maxRetries: 0,
+      timeout: 60_000,
+    }) as unknown as OpenAiClientLike);
 
   return async (request) => {
+    request.budget?.consume();
     const response = await client.responses.parse({
       input: JSON.stringify({
         pageText: request.pageText,

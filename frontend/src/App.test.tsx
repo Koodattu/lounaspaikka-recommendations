@@ -154,7 +154,7 @@ describe("reader app", () => {
         name: /Muun ravintolan lista.*avautuu uuteen välilehteen/,
       }),
     ).toBeTruthy();
-    expect(screen.queryByText("Kuha ja raikas lisuke tekevät tästä päivän kiinnostavimman lounaan.")).toBeNull();
+    expect(screen.getByText("Kuha ja raikas lisuke tekevät tästä päivän kiinnostavimman lounaan.")).toBeTruthy();
     expect(screen.getAllByText("Paahdettua kuhaa").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Sitruunaperunoita").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Ilmoitetut allergeenit: kala").length).toBeGreaterThan(0);
@@ -164,7 +164,7 @@ describe("reader app", () => {
       ?.closest("article");
     expect(companion).not.toBeNull();
     expect(within(companion!).getByText("Kasviscurry")).toBeTruthy();
-    expect(within(companion!).queryByText("Monipuolinen kasvislounas erottuu edukseen.")).toBeNull();
+    expect(within(companion!).getByText("Monipuolinen kasvislounas erottuu edukseen.")).toBeTruthy();
     expect(screen.getByRole("link", { name: /Avaa reitti.*avautuu uuteen välilehteen/ })).toBeTruthy();
     const dataNotice = screen.getByText(/Ruokavaliomerkinnät on poimittu automaattisesti/);
     const primaryRestaurant = screen.getByRole("heading", { name: "Vinola", level: 2 });
@@ -605,12 +605,18 @@ describe("reader app", () => {
       expect(screen.getByRole("button", { name: "Liian korkea" }).getAttribute("aria-pressed"))
         .toBe("true"),
     );
+    expect(screen.getByRole("status").textContent).toContain("Vinola");
     fireEvent.change(screen.getByLabelText("Lounaspäivä"), {
       target: { value: "2026-07-13" },
     });
+    expect(screen.queryByText("Palaute tallennettiin: Vinola.")).toBeNull();
     expect(screen.getByText("Tortillavaihtoehdot saivat korkean arvion.")).toBeTruthy();
     expect(screen.queryByText("Kuha tekee listasta kiinnostavan.")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Ravintolan ruokalistasivu"), {
+    const sourceInput = screen.getByLabelText("Ravintolan ruokalistasivu");
+    expect(sourceInput.getAttribute("pattern")).toBe("https://.*");
+    expect(sourceInput.getAttribute("maxlength")).toBe("2048");
+    expect(sourceInput.getAttribute("aria-describedby")).toBe("menu-source-hint");
+    fireEvent.change(sourceInput, {
       target: { value: "https://backyard.fi/ideapark/" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Lisää ja hae ruokalista" }));
@@ -622,6 +628,130 @@ describe("reader app", () => {
       ),
     );
     expect(await screen.findByText("Lähde lisättiin ja ruokalista haettiin.")).toBeTruthy();
+  });
+
+  it.each(["feedback", "source"] as const)(
+    "returns an operator to login when the session expires during a %s mutation",
+    async (mutation) => {
+    window.history.replaceState({}, "", "/admin");
+    let authenticated = false;
+    const mutationUrl = mutation === "feedback"
+      ? "/api/admin/assessments/42/feedback"
+      : "/api/admin/sources";
+    const overview = {
+      counts: {
+        assessments: 1,
+        customSources: 0,
+        fetches: 1,
+        offeringRevisions: 1,
+        recommendationSets: 1,
+        restaurants: 1,
+      },
+      errors: [],
+      generatedAt: "2026-07-14T05:00:00.000Z",
+      latestFetch: {
+        attemptedAt: "2026-07-14T04:05:00.000Z",
+        lastSuccessfulAt: "2026-07-14T04:05:00.000Z",
+        outcome: "success",
+      },
+      openAiConfigured: true,
+      recentAssessments: [{
+        assessedAt: "2026-07-14T04:11:00.000Z",
+        assessmentId: 42,
+        feedbackDirection: null,
+        menuText: "Paahdettua kuhaa ja perunoita",
+        rationale: "Kuha tekee listasta kiinnostavan.",
+        restaurantId: "vinola",
+        restaurantName: "Vinola",
+        score: 8.2,
+        scores: { appeal: 8, distinctiveness: 9, value: 7, variety: 8 },
+        serviceDate: "2026-07-14",
+      }],
+      refresh: {
+        currentTarget: null,
+        lastError: null,
+        lastFinishedAt: "2026-07-14T04:05:00.000Z",
+        running: false,
+        startedAt: "2026-07-14T04:00:00.000Z",
+      },
+      sources: [],
+      uptimeSeconds: 3600,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/admin/login") {
+        authenticated = true;
+        return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
+      }
+      if (url === "/api/admin/overview") {
+        return authenticated
+          ? new Response(JSON.stringify(overview), { status: 200 })
+          : new Response(
+            JSON.stringify({ error: { message: "Kirjaudu sisään jatkaaksesi." } }),
+            { status: 401 },
+          );
+      }
+      if (url === mutationUrl) {
+        authenticated = false;
+        return new Response(
+          JSON.stringify({ error: { message: "Kirjaudu sisään jatkaaksesi." } }),
+          { status: 401 },
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Kirjaudu ylläpitoon" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Salasana"), {
+      target: { value: "a-long-test-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Kirjaudu" }));
+
+    expect(await screen.findByRole("heading", { name: "Järjestelmän tila" })).toBeTruthy();
+    if (mutation === "feedback") {
+      fireEvent.click(screen.getByRole("button", { name: "Liian korkea" }));
+    } else {
+      fireEvent.change(screen.getByLabelText("Ravintolan ruokalistasivu"), {
+        target: { value: "https://example.com/lounas" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Lisää ja hae ruokalista" }));
+    }
+
+    expect(await screen.findByRole("heading", { name: "Kirjaudu ylläpitoon" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Istunto vanheni. Kirjaudu uudelleen jatkaaksesi.",
+    );
+  });
+
+  it("explains when login succeeds but the session cannot be established", async () => {
+    window.history.replaceState({}, "", "/admin");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/admin/login") {
+        return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
+      }
+      if (url === "/api/admin/overview") {
+        return new Response(
+          JSON.stringify({ error: { message: "Kirjaudu sisään jatkaaksesi." } }),
+          { status: 401 },
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Kirjaudu ylläpitoon" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Salasana"), {
+      target: { value: "a-long-test-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Kirjaudu" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Kirjautuminen ei valmistunut. Yritä uudelleen.",
+    );
   });
 
   it("keeps the dashboard visible when logout fails", async () => {

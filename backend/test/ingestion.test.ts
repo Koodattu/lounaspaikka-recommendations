@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 import { openDatabase } from "../src/database.js";
 import { ingestLunchDay } from "../src/ingestion.js";
 import { getDayMenus, getFetchState, getOfferingHistory } from "../src/queries.js";
-import { createLounaspaikkaClient } from "../src/source.js";
+import { createLounaspaikkaClient, type LunchSource } from "../src/source.js";
 
 const dailyAd = {
   header: "Lounas 14.7.",
@@ -100,6 +100,7 @@ describe("lunch ingestion", () => {
         fetchedAt: "2026-07-14T04:10:00.000Z",
         menu: expect.objectContaining({
           lunchHours: "10.30–14",
+          priceText: "13,70 €",
           text: "Mustajuurikeitto (L, G)\nLounaspöytä 13,70 €",
         }),
         restaurant: expect.objectContaining({
@@ -142,6 +143,51 @@ describe("lunch ingestion", () => {
     expect(getDayMenus(db, "2026-07-14")[0]?.menu.text).toBe(
       "Paahdettua lohta (L, G)\n14,20 €",
     );
+    expect(getDayMenus(db, "2026-07-14")[0]?.menu.priceText).toBe("14,20 €");
+  });
+
+  it("stores explicit Paikka lunch prices without including unrelated offers", async () => {
+    const source: LunchSource = {
+      fetchLunchDay: async (serviceDate) => ({
+        items: [
+          {
+            ...restaurant,
+            ads: [{
+              ad: {
+                ...dailyAd,
+                body: "Aamupala 9,90 €<br>Lounas 13,90 €<br>Eläkeläiset 11,90 €<br>Lounaspassi 20 €",
+              },
+            }],
+          },
+          {
+            ...restaurant,
+            id: "structured-price",
+            name: "Hintala",
+            ads: [{
+              ad: {
+                ...dailyAd,
+                body: "Keitto ja päivän annos",
+                lunchMenu: [
+                  { food: "Keitto", price: "11.5" },
+                  { food: "Päivän annos", price: "13,50" },
+                ],
+              },
+            }],
+          },
+        ],
+        pages: [{ body: "fixture", status: 200, url: "fixture" }],
+        request: { latitude: 62.7907, longitude: 22.8396, maxDistance: 50_000, serviceDate },
+      }),
+    };
+    db = openDatabase(":memory:");
+
+    await ingestLunchDay({ db, serviceDate: "2026-07-14", source });
+
+    const menus = getDayMenus(db, "2026-07-14");
+    expect(menus.find((entry) => entry.restaurant.id === "1342653")?.menu.priceText)
+      .toBe("13,90 €");
+    expect(menus.find((entry) => entry.restaurant.id === "structured-price")?.menu.priceText)
+      .toBe("11,50–13,50 €");
   });
 
   it("records a failed retry without replacing the latest successful menus", async () => {

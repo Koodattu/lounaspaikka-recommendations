@@ -67,6 +67,55 @@ function fallbackLunchHours(item: Record<string, unknown>, serviceDate: string):
   return periods.length > 0 ? periods.join(", ") : null;
 }
 
+interface EuroPrice {
+  amount: number;
+  text: string;
+}
+
+function euroPrice(value: unknown): EuroPrice | null {
+  const candidate = optionalString(value);
+  const match = candidate?.match(/^(\d{1,3})(?:[.,](\d{1,2}))?\s*(?:€|eur)?$/i);
+  if (!match) return null;
+
+  const decimals = match[2]?.padEnd(2, "0") ?? "";
+  return {
+    amount: Number(`${match[1]}.${decimals || "0"}`),
+    text: `${match[1]}${decimals ? `,${decimals}` : ""} €`,
+  };
+}
+
+function extractLunchPriceText(
+  dailyAd: Record<string, unknown> | null,
+  menuText: string | null,
+): string | null {
+  const prices: EuroPrice[] = [];
+  const addPrice = (value: unknown) => {
+    const price = euroPrice(value);
+    if (price && !prices.some((candidate) => candidate.amount === price.amount)) {
+      prices.push(price);
+    }
+  };
+
+  if (Array.isArray(dailyAd?.lunchMenu)) {
+    for (const value of dailyAd.lunchMenu) addPrice(record(value)?.price);
+  }
+
+  if (menuText) {
+    const lunchPricePattern = /(?:koko\s+)?(?:lounas(?:buffet|pöytä|tarjous|ateria)?|keitto-?lounas|salaatti-?lounas|noutopöytä|päivän\s+(?:burger|parila|salaatti)|viikon\s+kasvis)(?!\p{L})[^€\n]{0,48}?(\d{1,3}(?:[.,]\d{1,2})?)\s*€/giu;
+    for (const match of menuText.matchAll(lunchPricePattern)) addPrice(match[1]);
+
+    if (prices.length === 0) {
+      const allEuroPrices = [...menuText.matchAll(/(\d{1,3}(?:[.,]\d{1,2})?)\s*€/gu)];
+      if (allEuroPrices.length === 1) addPrice(allEuroPrices[0]?.[1]);
+    }
+  }
+
+  prices.sort((first, second) => first.amount - second.amount);
+  if (prices.length === 0) return null;
+  if (prices.length === 1) return prices[0]!.text;
+  return `${prices[0]!.text.replace(/ €$/, "")}–${prices.at(-1)!.text}`;
+}
+
 function parseRestaurant(value: unknown, serviceDate: string): StoredOffering {
   const item = record(value);
   const id = optionalString(item?.id);
@@ -101,7 +150,7 @@ function parseRestaurant(value: unknown, serviceDate: string): StoredOffering {
     openingHours: item.openingHours ?? [],
     phone: optionalString(item.tel),
     photoUrl: optionalHttpUrl(item.photo),
-    priceText: null,
+    priceText: extractLunchPriceText(dailyAd, menuText),
     snapshot: { dailyAd, restaurant: item },
     websiteUrl: optionalHttpUrl(item.www),
   };

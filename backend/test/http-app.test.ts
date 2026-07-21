@@ -118,6 +118,7 @@ describe("reader API", () => {
     });
     expect(dayBody.menus).toHaveLength(4);
     expect(dayBody.menus[1].menu.text).toBe("Paahdettua kuhaa\n13,50 €");
+    expect(dayBody.menus[1].menu.priceText).toBe("13,50 €");
     expect(dayBody.menus[1].menu.structuredMenu).toEqual({
       courses: [{
         category: "main",

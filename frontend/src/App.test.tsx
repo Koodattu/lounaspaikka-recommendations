@@ -18,6 +18,7 @@ const restaurant = {
 
 const menu = {
   lunchHours: "10.30–14",
+  priceText: "13,70 €",
   status: "published",
   structuredMenu: {
     courses: [
@@ -104,6 +105,7 @@ describe("reader app", () => {
       await screen.findByText("Tiistai 14. heinäkuuta ladattu. 2 ravintolaa ja 3 suositusta."),
     ).toBeTruthy();
     expect(screen.getAllByText("Vinola")).toHaveLength(2);
+    expect(screen.getAllByText("13,70 €").length).toBeGreaterThan(0);
     expect(screen.queryByText("9,2")).toBeNull();
     const allMenusHeading = screen.getByRole("heading", { name: "Kaikki päivän lounaat" });
     expect(allMenusHeading).toBeTruthy();
@@ -219,6 +221,7 @@ describe("reader app", () => {
           days: Array.from({ length: 7 }, (_, index) => ({
             fetchedAt: index === 1 ? `2026-07-${publishedDay}T03:10:00.000Z` : null,
             lunchHours: index === 1 ? "10.30–14" : null,
+            priceText: index === 1 ? "13,70 €" : null,
             serviceDate: `2026-07-${String(startDay + index).padStart(2, "0")}`,
             status: index === 1 ? "published" : index === 0 ? "not_published" : "missing",
             structuredMenu: index === 1 ? {
@@ -256,6 +259,7 @@ describe("reader app", () => {
     expect(screen.getByRole("link", { name: "Tiistai 14. heinäkuuta · suosituksiin" }).getAttribute("href"))
       .toBe("/?date=2026-07-14");
     expect(screen.getAllByText("Paahdettua kuhaa").length).toBeGreaterThan(0);
+    expect(screen.getByText("13,70 €")).toBeTruthy();
     expect(screen.getByText("L")).toBeTruthy();
     expect(screen.getByLabelText(/L, laktoositon; G, gluteeniton/)).toBeTruthy();
     const selectedDay = selectedDayHeading.closest("article");

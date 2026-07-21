@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createOpenAiMenuExtractor } from "../src/openai-menu-extractor.js";
-import { OpenAiRequestBudget } from "../src/openai-request-budget.js";
 
 describe("OpenAI menu page extractor", () => {
   it("uses structured output, treats page text as untrusted, and limits dates", async () => {
@@ -65,8 +64,8 @@ describe("OpenAI menu page extractor", () => {
     });
   });
 
-  it("does not call OpenAI after the request budget is exhausted", async () => {
-    const parse = vi.fn();
+  it("rejects a missing structured extraction", async () => {
+    const parse = vi.fn().mockResolvedValue({ id: "empty", output_parsed: null });
     const extractor = createOpenAiMenuExtractor({
       apiKey: "test-key",
       client: { responses: { parse } },
@@ -74,12 +73,10 @@ describe("OpenAI menu page extractor", () => {
 
     await expect(
       extractor({
-        budget: new OpenAiRequestBudget(0),
         pageText: "Lounas",
         serviceDates: ["2026-07-14"],
         url: "https://example.com/menu",
       }),
-    ).rejects.toThrow("budget");
-    expect(parse).not.toHaveBeenCalled();
+    ).rejects.toThrow("did not return");
   });
 });

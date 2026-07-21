@@ -6,10 +6,19 @@ import {
   formatLongDate,
   formatShortDate,
   formatUpdatedAt,
-  isIsoDate,
   startOfWeek,
   todayInHelsinki,
 } from "./dates";
+import {
+  appRoute,
+  browserAdapter,
+  dayHref,
+  dayRouteDate,
+  restaurantHref,
+  restaurantRouteState,
+  restaurantWeekHref,
+  type BrowserAdapter,
+} from "./navigation";
 import type { DayResponse, Menu, Restaurant, RestaurantWeekResponse } from "./types";
 
 type RestaurantDay = RestaurantWeekResponse["days"][number];
@@ -17,7 +26,7 @@ type RestaurantDay = RestaurantWeekResponse["days"][number];
 const AdminPage = lazy(() => import("./AdminPage").then((module) => ({ default: module.AdminPage })));
 
 class AdminRouteErrorBoundary extends Component<
-  { children: ReactNode },
+  { children: ReactNode; onReload: () => void },
   { hasError: boolean }
 > {
   state = { hasError: false };
@@ -36,7 +45,7 @@ class AdminRouteErrorBoundary extends Component<
             <button
               className="button button-dark"
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={this.props.onReload}
             >
               Lataa sivu uudelleen
             </button>
@@ -132,10 +141,6 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function restaurantHref(restaurant: Restaurant, date: string): string {
-  return `/ravintolat/${encodeURIComponent(restaurant.id)}?week=${startOfWeek(date)}&date=${date}`;
-}
-
 function RestaurantLink({
   className = "",
   label = "Ravintolan sivu",
@@ -148,7 +153,7 @@ function RestaurantLink({
   date: string;
 }) {
   return (
-    <a className={`text-link ${className}`.trim()} href={restaurantHref(restaurant, date)}>
+    <a className={`text-link ${className}`.trim()} href={restaurantHref(restaurant.id, date)}>
       <span>{label}</span>
       <span aria-hidden="true">→</span>
     </a>
@@ -319,7 +324,7 @@ function RecommendationList({ data }: { data: DayResponse }) {
                   <span className="recommendation-row-main">
                     <a
                       className="recommendation-name-link"
-                      href={restaurantHref(recommendation.restaurant, data.serviceDate)}
+                      href={restaurantHref(recommendation.restaurant.id, data.serviceDate)}
                     >
                       <strong>{recommendation.restaurant.name}</strong>
                       <span aria-hidden="true">→</span>
@@ -377,7 +382,7 @@ function OtherMenus({ data }: { data: DayResponse }) {
               <header className="menu-row-heading">
                 <div className="menu-row-restaurant">
                   <h3>
-                    <a href={restaurantHref(entry.restaurant, data.serviceDate)}>
+                    <a href={restaurantHref(entry.restaurant.id, data.serviceDate)}>
                       {entry.restaurant.name}
                     </a>
                   </h3>
@@ -413,11 +418,8 @@ function OtherMenus({ data }: { data: DayResponse }) {
   );
 }
 
-function DayPage() {
-  const [date, setDate] = useState(() => {
-    const initialDate = new URLSearchParams(window.location.search).get("date");
-    return isIsoDate(initialDate) ? initialDate : todayInHelsinki();
-  });
+function DayPage({ browser }: { browser: BrowserAdapter }) {
+  const [date, setDate] = useState(() => dayRouteDate(browser.location().search));
   const [data, setData] = useState<DayResponse | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -440,15 +442,13 @@ function DayPage() {
 
   useEffect(() => {
     const syncDate = () => {
-      const nextDate = new URLSearchParams(window.location.search).get("date");
-      setDate(isIsoDate(nextDate) ? nextDate : todayInHelsinki());
+      setDate(dayRouteDate(browser.location().search));
     };
-    window.addEventListener("popstate", syncDate);
-    return () => window.removeEventListener("popstate", syncDate);
-  }, []);
+    return browser.subscribePopState(syncDate);
+  }, [browser]);
 
   function changeDate(nextDate: string) {
-    window.history.pushState({}, "", `/?date=${nextDate}`);
+    browser.push(dayHref(nextDate));
     setDate(nextDate);
   }
 
@@ -543,21 +543,6 @@ const weekdayNames: Record<string, string> = {
   WE: "Ke",
 };
 
-function restaurantRouteState(search: string): { selectedDate: string; week: string } {
-  const params = new URLSearchParams(search);
-  const today = todayInHelsinki();
-  const dateParam = params.get("date");
-  const weekParam = params.get("week");
-
-  if (isIsoDate(dateParam)) {
-    return { selectedDate: dateParam, week: startOfWeek(dateParam) };
-  }
-
-  const week = isIsoDate(weekParam) ? startOfWeek(weekParam) : startOfWeek(today);
-  const selectedDate = startOfWeek(today) === week ? today : week;
-  return { selectedDate, week };
-}
-
 function EmptyDayMessage({ day }: { day: RestaurantDay }) {
   return (
     <p className="muted">
@@ -574,8 +559,14 @@ function DayMenu({ day }: { day: RestaurantDay }) {
     : <EmptyDayMessage day={day} />;
 }
 
-function RestaurantPage({ restaurantId }: { restaurantId: string }) {
-  const initialState = restaurantRouteState(window.location.search);
+function RestaurantPage({
+  browser,
+  restaurantId,
+}: {
+  browser: BrowserAdapter;
+  restaurantId: string;
+}) {
+  const initialState = restaurantRouteState(browser.location().search);
   const [week, setWeek] = useState(initialState.week);
   const [selectedDate, setSelectedDate] = useState(initialState.selectedDate);
   const [data, setData] = useState<RestaurantWeekResponse | null>(null);
@@ -606,22 +597,17 @@ function RestaurantPage({ restaurantId }: { restaurantId: string }) {
 
   useEffect(() => {
     const syncWeek = () => {
-      const routeState = restaurantRouteState(window.location.search);
+      const routeState = restaurantRouteState(browser.location().search);
       setWeek(routeState.week);
       setSelectedDate(routeState.selectedDate);
     };
-    window.addEventListener("popstate", syncWeek);
-    return () => window.removeEventListener("popstate", syncWeek);
-  }, []);
+    return browser.subscribePopState(syncWeek);
+  }, [browser]);
 
   function changeWeek(amount: number) {
     const nextWeek = addDays(week, amount);
     const nextDate = addDays(selectedDate, amount);
-    window.history.pushState(
-      {},
-      "",
-      `/ravintolat/${encodeURIComponent(restaurantId)}?week=${nextWeek}&date=${nextDate}`,
-    );
+    browser.push(restaurantWeekHref(restaurantId, nextWeek, nextDate));
     setWeek(nextWeek);
     setSelectedDate(nextDate);
   }
@@ -629,11 +615,7 @@ function RestaurantPage({ restaurantId }: { restaurantId: string }) {
   function goToToday() {
     const today = todayInHelsinki();
     const todayWeek = startOfWeek(today);
-    window.history.pushState(
-      {},
-      "",
-      `/ravintolat/${encodeURIComponent(restaurantId)}?week=${todayWeek}&date=${today}`,
-    );
+    browser.push(restaurantWeekHref(restaurantId, todayWeek, today));
     setWeek(todayWeek);
     setSelectedDate(today);
   }
@@ -821,13 +803,13 @@ function RestaurantPage({ restaurantId }: { restaurantId: string }) {
   );
 }
 
-function AdminRoute() {
+function AdminRoute({ browser }: { browser: BrowserAdapter }) {
   useEffect(() => {
     document.title = "Ylläpito | Mihin lounaalle?";
   }, []);
 
   return (
-    <AdminRouteErrorBoundary>
+    <AdminRouteErrorBoundary onReload={browser.reload}>
       <Suspense
         fallback={(
           <main className="admin-main admin-login-main">
@@ -843,11 +825,11 @@ function AdminRoute() {
   );
 }
 
-export function App() {
-  if (window.location.pathname === "/admin" || window.location.pathname === "/admin/") {
-    return <AdminRoute />;
+export function App({ browser = browserAdapter }: { browser?: BrowserAdapter }) {
+  const route = appRoute(browser.location().pathname);
+  if (route.kind === "admin") return <AdminRoute browser={browser} />;
+  if (route.kind === "restaurant") {
+    return <RestaurantPage browser={browser} restaurantId={route.restaurantId} />;
   }
-  const restaurantMatch = window.location.pathname.match(/^\/ravintolat\/([^/]+)\/?$/);
-  if (restaurantMatch?.[1]) return <RestaurantPage restaurantId={decodeURIComponent(restaurantMatch[1])} />;
-  return <DayPage />;
+  return <DayPage browser={browser} />;
 }

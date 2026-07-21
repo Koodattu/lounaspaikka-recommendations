@@ -4,31 +4,18 @@ import type { FastifyInstance } from "fastify";
 
 import { openDatabase } from "../src/database.js";
 import { createServer } from "../src/http-app.js";
-import { ingestLunchDay } from "../src/ingestion.js";
 import { assessAndRankDay } from "../src/recommendations.js";
-import type { LunchSource } from "../src/source.js";
+import { createRestaurantCatchment } from "../src/restaurant-catchment.js";
+import { capturedOffering, catchmentAdapterForOfferings } from "./catchment-fixture.js";
 
 function item(id: string, name: string, body: string) {
-  return {
+  return capturedOffering(id, name, body.replaceAll("<br>", "\n"), {
     address: `${name}ntie 1`,
-    ads: [
-      {
-        ad: {
-          body,
-          contentType: 32,
-          header: "Lounas 14.7.",
-          lunchOh: "10.30-14",
-        },
-      },
-    ],
-    city: "Seinäjoki",
-    desc: "Lounasravintola<br>",
-    id,
-    marker: { latitude: "62.79", longitude: "22.84" },
-    name,
+    descriptionText: "Lounasravintola",
     openingHours: [{ mon: [{ close: "14.00", open: "10.30" }] }],
-    www: `https://example.com/${id}`,
-  };
+    priceText: body.includes("13,50 €") ? "13,50 €" : null,
+    websiteUrl: `https://example.com/${id}`,
+  });
 }
 
 describe("reader API", () => {
@@ -47,40 +34,34 @@ describe("reader API", () => {
       item("c", "C-ravintola", "Lihapullat"),
       item("d", "D-ravintola", "Hernekeitto"),
     ];
-    const source: LunchSource = {
-      fetchLunchDay: async (serviceDate) => ({
-        items,
-        pages: [{ body: JSON.stringify({ items }), status: 200, url: "fixture" }],
-        request: { latitude: 62.7907, longitude: 22.8396, maxDistance: 50_000, serviceDate },
-      }),
-    };
     db = openDatabase(":memory:");
-    await ingestLunchDay({
+    await createRestaurantCatchment({
       db,
+      lounaspaikka: catchmentAdapterForOfferings(items),
       now: () => new Date("2026-07-14T03:10:00.000Z"),
-      serviceDate: "2026-07-14",
-      source,
-    });
+    }).refresh("2026-07-14");
     await assessAndRankDay({
-      assessor: async ({ offerings }) =>
-        offerings.map((offering, index) => ({
-          rationaleFi: `${offering.restaurantName} tarjoaa päivän kiinnostavimman annoksen.`,
-          revisionId: offering.revisionId,
-          scores: {
-            appeal: 10 - index,
-            distinctiveness: 10 - index,
-            value: 10 - index,
-            variety: 10 - index,
+      assessor: {
+        assess: async (facts) => ({
+          assessment: {
+            rationaleFi: `${facts.menuText} tarjoaa päivän kiinnostavimman annoksen.`,
+            scores: {
+              appeal: 10,
+              distinctiveness: 10,
+              value: 10,
+              variety: 10,
+            },
+            structuredMenu: {
+              courses: [{
+                category: "main" as const,
+                dietaryMarkers: ["G"],
+                explicitAllergens: [],
+                nameFi: facts.menuText.split("\n")[0]!,
+              }],
+            },
           },
-          structuredMenu: {
-            courses: [{
-              category: "main" as const,
-              dietaryMarkers: ["G"],
-              explicitAllergens: [],
-              nameFi: offering.menuText.split("\n")[0]!,
-            }],
-          },
-        })),
+        }),
+      },
       db,
       now: () => new Date("2026-07-14T03:11:00.000Z"),
       serviceDate: "2026-07-14",
@@ -112,7 +93,7 @@ describe("reader API", () => {
         },
       },
       rank: 1,
-      rationale: "A-ravintola tarjoaa päivän kiinnostavimman annoksen.",
+      rationale: "Kasviscurry tarjoaa päivän kiinnostavimman annoksen.",
       restaurant: { id: "a", name: "A-ravintola" },
       score: 10,
     });

@@ -4,21 +4,46 @@ import { dirname, resolve } from "node:path";
 import { createCustomSourceService } from "./custom-sources.js";
 import { openDatabase } from "./database.js";
 import { createServer } from "./http-app.js";
-import { ingestLunchDay } from "./ingestion.js";
+import { createLounaspaikkaCatchmentAdapter } from "./lounaspaikka-catchment.js";
 import { createOpenAiAssessor } from "./openai-assessor.js";
 import { createOpenAiMenuExtractor } from "./openai-menu-extractor.js";
-import {
-  OpenAiRequestBudget,
-  parseOpenAiRequestBudget,
-} from "./openai-request-budget.js";
+import { parseOpenAiRequestBudget } from "./openai-request-budget.js";
 import { createMenuPageFetcher } from "./page-fetcher.js";
-import { assessAndRankDay } from "./recommendations.js";
+import {
+  createRecommendationPublication,
+  type RecommendationPublicationOutcome,
+} from "./recommendation-publication.js";
+import { createRestaurantCatchment } from "./restaurant-catchment.js";
 import {
   createRefreshCoordinator,
   datesToRefresh,
   startRefreshSchedule,
 } from "./refresh.js";
-import { createLounaspaikkaClient } from "./source.js";
+
+function reportPublication(
+  outcome: RecommendationPublicationOutcome,
+  trigger: "scheduled" | "source-add",
+): unknown {
+  let firstError: unknown;
+  for (const date of outcome.dates) {
+    if (date.status === "succeeded") {
+      if (trigger === "scheduled") {
+        console.info(
+          `[recommendations] ${date.serviceDate}: ${date.result.createdAssessmentCount} assessed`,
+        );
+      }
+      continue;
+    }
+    if (date.status !== "failed") continue;
+    firstError ??= date.error;
+    const message = date.error instanceof Error
+      ? date.error.message
+      : "Unknown recommendation error";
+    const suffix = trigger === "source-add" ? " after source add" : "";
+    console.error(`[recommendations] ${date.serviceDate} failed${suffix}: ${message}`);
+  }
+  return firstError;
+}
 
 async function start(): Promise<void> {
   const databasePath = resolve(process.env.DATABASE_PATH ?? "data/lunch.sqlite");
@@ -40,7 +65,10 @@ async function start(): Promise<void> {
 
   mkdirSync(dirname(databasePath), { recursive: true });
   const db = openDatabase(databasePath);
-  const source = createLounaspaikkaClient();
+  const restaurantCatchment = createRestaurantCatchment({
+    db,
+    lounaspaikka: createLounaspaikkaCatchmentAdapter(),
+  });
   const assessor = process.env.OPENAI_API_KEY
     ? createOpenAiAssessor({ apiKey: process.env.OPENAI_API_KEY, model })
     : null;
@@ -52,34 +80,22 @@ async function start(): Promise<void> {
         model,
       })
     : null;
+  const publication = createRecommendationPublication({
+    adminRequestBudget: adminOpenAiRequestBudget,
+    assessor,
+    customSources: customSourceService,
+    db,
+    refreshRequestBudget: refreshOpenAiRequestBudget,
+    versions: { model },
+  });
   const coordinator = createRefreshCoordinator({
     async afterDates(serviceDates) {
-      const budget = new OpenAiRequestBudget(refreshOpenAiRequestBudget);
-      await customSourceService?.crawlAll(serviceDates, budget);
-      if (!assessor) return;
-      let firstError: unknown;
-      for (const serviceDate of serviceDates) {
-        try {
-          const recommendations = await assessAndRankDay({
-            assessor,
-            budget,
-            db,
-            serviceDate,
-            versions: { model },
-          });
-          console.info(
-            `[recommendations] ${serviceDate}: ${recommendations.createdAssessmentCount} assessed`,
-          );
-        } catch (error) {
-          firstError ??= error;
-          const message = error instanceof Error ? error.message : "Unknown recommendation error";
-          console.error(`[recommendations] ${serviceDate} failed: ${message}`);
-        }
-      }
+      const outcome = await publication.runScheduled(serviceDates);
+      const firstError = reportPublication(outcome, "scheduled");
       if (firstError) throw firstError;
     },
     async runDate(serviceDate) {
-      const result = await ingestLunchDay({ db, serviceDate, source });
+      const result = await restaurantCatchment.refresh(serviceDate);
       console.info(
         `[refresh] ${serviceDate}: ${result.itemCount} restaurants, ${result.createdRevisionCount} changed`,
       );
@@ -93,25 +109,9 @@ async function start(): Promise<void> {
     addCustomSource: customSourceService
       ? async (url) => {
           const serviceDates = datesToRefresh(new Date());
-          const budget = new OpenAiRequestBudget(adminOpenAiRequestBudget);
-          const result = await customSourceService.addAndCrawl(url, serviceDates, budget);
-          if (assessor) {
-            for (const serviceDate of serviceDates) {
-              try {
-                await assessAndRankDay({
-                  assessor,
-                  budget,
-                  db,
-                  serviceDate,
-                  versions: { model },
-                });
-              } catch (error) {
-                const message = error instanceof Error ? error.message : "Unknown recommendation error";
-                console.error(`[recommendations] ${serviceDate} failed after source add: ${message}`);
-              }
-            }
-          }
-          return result;
+          const result = await publication.addCustomSource(url, serviceDates);
+          reportPublication(result.outcome, "source-add");
+          return result.source;
         }
       : undefined,
     adminPassword: process.env.ADMIN_PASSWORD,

@@ -3,38 +3,19 @@ import type Database from "better-sqlite3";
 
 import { createCustomSourceService } from "../src/custom-sources.js";
 import { openDatabase } from "../src/database.js";
-import { ingestLunchDay } from "../src/ingestion.js";
+import { OpenAiRequestBudget } from "../src/openai-request-budget.js";
 import { getDayMenus, getOfferingHistory, getRestaurantWeek } from "../src/queries.js";
-import { assessAndRankDay, type Assessor } from "../src/recommendations.js";
-import type { LunchSource } from "../src/source.js";
+import { assessAndRankDay, type AssessmentAdapter } from "../src/recommendations.js";
+import type { LounaspaikkaCatchmentAdapter } from "../src/lounaspaikka-catchment.js";
+import { createRestaurantCatchment } from "../src/restaurant-catchment.js";
+import { capturedOffering, catchmentAdapterForOfferings } from "./catchment-fixture.js";
 
 const serviceDates = ["2026-07-14", "2026-07-15"];
 
-function lounaspaikkaSource(): LunchSource {
-  const items = [
-    {
-      ads: [
-        {
-          ad: {
-            body: "Paahdettua kuhaa",
-            contentType: 32,
-            header: "Lounas 14.7.",
-            lunchOh: "10.30-14",
-          },
-        },
-      ],
-      id: "api-restaurant",
-      marker: { latitude: "62.79", longitude: "22.84" },
-      name: "API-ravintola",
-    },
-  ];
-  return {
-    fetchLunchDay: async (serviceDate) => ({
-      items,
-      pages: [{ body: JSON.stringify({ items }), status: 200, url: "fixture" }],
-      request: { latitude: 62.7907, longitude: 22.8396, maxDistance: 50_000, serviceDate },
-    }),
-  };
+function lounaspaikkaAdapter(): LounaspaikkaCatchmentAdapter {
+  return catchmentAdapterForOfferings([
+    capturedOffering("api-restaurant", "API-ravintola", "Paahdettua kuhaa"),
+  ]);
 }
 
 describe("custom menu sources", () => {
@@ -45,12 +26,11 @@ describe("custom menu sources", () => {
   it("unions source-scoped snapshots and reuses an unchanged page extraction", async () => {
     db = openDatabase(":memory:");
     expect(db.pragma("user_version", { simple: true })).toBe(5);
-    await ingestLunchDay({
+    await createRestaurantCatchment({
       db,
+      lounaspaikka: lounaspaikkaAdapter(),
       now: () => new Date("2026-07-14T03:00:00.000Z"),
-      serviceDate: serviceDates[0]!,
-      source: lounaspaikkaSource(),
-    });
+    }).refresh(serviceDates[0]!);
 
     const fetchPage = vi.fn(async () => ({
       body: "<h2>Lounasbuffet</h2><h4>Ti 14.7.</h4><p>Lihapullat</p>",
@@ -103,12 +83,15 @@ describe("custom menu sources", () => {
       now: () => new Date("2026-07-14T04:00:00.000Z"),
     });
 
+    const extractionBudget = new OpenAiRequestBudget(1);
     const first = await service.addAndCrawl(
       "https://backyard.fi/ideapark/",
       serviceDates,
+      extractionBudget,
     );
 
     expect(first).toMatchObject({ createdRevisionCount: 2, reusedExtraction: false });
+    expect(extractionBudget).toMatchObject({ remaining: 0, used: 1 });
     expect(getDayMenus(db, "2026-07-14")).toEqual([
       expect.objectContaining({ restaurant: expect.objectContaining({ id: "api-restaurant" }) }),
       expect.objectContaining({
@@ -131,41 +114,46 @@ describe("custom menu sources", () => {
       url: "https://backyard.fi/ideapark/",
     });
 
-    const assessor = vi.fn<Assessor>(async ({ offerings }) =>
-      offerings.map((offering, index) => ({
-        rationaleFi: `${offering.restaurantName} kiinnostaa tänään.`,
-        revisionId: offering.revisionId,
+    const assess = vi.fn<AssessmentAdapter["assess"]>(async (facts) => ({
+      assessment: {
+        rationaleFi: `${facts.menuText} kiinnostaa tänään.`,
         scores: {
-          appeal: 9 - index,
-          distinctiveness: 8 - index,
-          value: 8 - index,
-          variety: 8 - index,
+          appeal: 9,
+          distinctiveness: 8,
+          value: 8,
+          variety: 8,
         },
         structuredMenu: {
           courses: [{
             category: "main" as const,
             dietaryMarkers: [],
             explicitAllergens: [],
-            nameFi: offering.restaurantName,
+            nameFi: facts.menuText.split("\n")[0]!,
           }],
         },
-      })),
-    );
+      },
+    }));
+    const assessor = { assess };
     await assessAndRankDay({
       assessor,
       db,
       serviceDate: "2026-07-14",
     });
-    expect(assessor).toHaveBeenCalledTimes(2);
+    expect(assess).toHaveBeenCalledTimes(2);
     expect(
-      assessor.mock.calls.map(([request]) => request.offerings[0]?.restaurantName),
-    ).toEqual(["API-ravintola", "Backyard Ideapark"]);
-    expect(assessor.mock.calls.every(([request]) => request.offerings.length === 1)).toBe(true);
+      assess.mock.calls.map(([facts]) => facts.menuText),
+    ).toEqual([
+      "Paahdettua kuhaa",
+      "Lihapullat sipuli-kermakastikkeessa\nPaahdetut perunat",
+    ]);
+    expect(assess.mock.calls.every(([facts]) => !("restaurantName" in facts))).toBe(true);
 
-    await service.crawlAll(serviceDates);
+    const cachedBudget = new OpenAiRequestBudget(0);
+    await service.crawlAll(serviceDates, cachedBudget);
 
     expect(fetchPage).toHaveBeenCalledTimes(2);
     expect(extractor).toHaveBeenCalledTimes(1);
+    expect(cachedBudget).toMatchObject({ remaining: 0, used: 0 });
     expect(getOfferingHistory(db, `custom:${first.sourceId}`, "2026-07-14")).toHaveLength(1);
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM custom_source_runs").get(),

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import { formatLongDate, todayInHelsinki } from "./dates";
+import type { BrowserAdapter, BrowserLocation } from "./navigation";
 
 const restaurant = {
   address: "Keskuskatu 10, Seinäjoki",
@@ -95,6 +96,30 @@ describe("reader app", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/?date=2026-07-14");
     vi.restoreAllMocks();
+  });
+
+  it("uses an injected browser adapter for local navigation", async () => {
+    let location: BrowserLocation = { pathname: "/", search: "?date=2026-07-14" };
+    const push = vi.fn((path: string) => {
+      const url = new URL(path, "https://example.test");
+      location = { pathname: url.pathname, search: url.search };
+    });
+    const browser: BrowserAdapter = {
+      location: () => location,
+      push,
+      reload: vi.fn(),
+      subscribePopState: () => () => undefined,
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(dayResponse), { status: 200 }),
+    );
+
+    render(<App browser={browser} />);
+    await screen.findByRole("heading", { name: "Päivän lounaat" });
+    fireEvent.click(screen.getByRole("button", { name: "Seuraava päivä" }));
+
+    expect(push).toHaveBeenCalledWith("/?date=2026-07-15");
+    expect(browser.location()).toEqual({ pathname: "/", search: "?date=2026-07-15" });
   });
 
   it("shows the top three once, then the remaining menus, and moves to the next date", async () => {

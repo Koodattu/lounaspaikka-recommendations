@@ -2,27 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 
 import { openDatabase } from "../src/database.js";
-import { ingestLunchDay } from "../src/ingestion.js";
+import { OpenAiRequestBudget } from "../src/openai-request-budget.js";
 import { assessAndRankDay, structuredMenuSchema } from "../src/recommendations.js";
-import type { LunchSource } from "../src/source.js";
+import { createRestaurantCatchment } from "../src/restaurant-catchment.js";
+import { capturedOffering, catchmentAdapterForOfferings } from "./catchment-fixture.js";
 
 function sourceItem(id: string, name: string, menu: string) {
-  return {
-    ads: [
-      {
-        ad: {
-          body: menu,
-          contentType: 32,
-          header: "Päivän lounas",
-          lunchOh: "10.30-14",
-        },
-      },
-    ],
-    city: "Seinäjoki",
-    id,
-    marker: { latitude: "62.79", longitude: "22.84" },
-    name,
-  };
+  return capturedOffering(id, name, menu);
 }
 
 describe("daily recommendations", () => {
@@ -37,25 +23,18 @@ describe("daily recommendations", () => {
       sourceItem("c", "C-ravintola", "Lihapullat"),
       sourceItem("d", "D-ravintola", "Hernekeitto"),
     ];
-    const source: LunchSource = {
-      fetchLunchDay: async (serviceDate) => ({
-        items,
-        pages: [{ body: JSON.stringify({ items }), status: 200, url: "fixture" }],
-        request: { latitude: 62.7907, longitude: 22.8396, maxDistance: 50_000, serviceDate },
-      }),
-    };
+    const lounaspaikka = catchmentAdapterForOfferings(() => items);
     const scores = new Map([
-      ["a", 8],
-      ["b", 9],
-      ["c", 7],
-      ["d", 7],
+      ["Kasviscurry", 8],
+      ["Paahdettua kuhaa", 9],
+      ["Lihapullat", 7],
+      ["Hernekeitto", 7],
     ]);
-    const assessor = vi.fn(async ({ offerings }) =>
-      offerings.map((offering: { restaurantId: string; revisionId: number }) => {
-        const score = scores.get(offering.restaurantId) ?? 0;
-        return {
-          rationaleFi: `${offering.restaurantId.toUpperCase()} tarjoaa kiinnostavan lounaan.`,
-          revisionId: offering.revisionId,
+    const assess = vi.fn(async (facts: { menuText: string }) => {
+      const score = scores.get(facts.menuText) ?? 0;
+      return {
+        assessment: {
+          rationaleFi: `${facts.menuText} tarjoaa kiinnostavan lounaan.`,
           scores: {
             appeal: score,
             distinctiveness: score,
@@ -67,14 +46,16 @@ describe("daily recommendations", () => {
               category: "main" as const,
               dietaryMarkers: [],
               explicitAllergens: [],
-              nameFi: offering.restaurantId === "b" ? "Paahdettua kuhaa" : "Päivän lounas",
+              nameFi: facts.menuText === "Paahdettua kuhaa" ? "Paahdettua kuhaa" : "Päivän lounas",
             }],
           },
-        };
-      }),
-    );
+        },
+      };
+    });
+    const assessor = { assess };
     db = openDatabase(":memory:");
-    await ingestLunchDay({ db, serviceDate: "2026-07-14", source });
+    const catchment = createRestaurantCatchment({ db, lounaspaikka });
+    await catchment.refresh("2026-07-14");
 
     const first = await assessAndRankDay({
       assessor,
@@ -82,8 +63,8 @@ describe("daily recommendations", () => {
       serviceDate: "2026-07-14",
     });
 
-    expect(assessor).toHaveBeenCalledTimes(4);
-    expect(assessor.mock.calls.every(([request]) => request.offerings.length === 1)).toBe(true);
+    expect(assess).toHaveBeenCalledTimes(4);
+    expect(assess.mock.calls.every(([facts]) => !("restaurantId" in facts))).toBe(true);
     expect(first.createdAssessmentCount).toBe(4);
     expect(first.recommendations.map(({ restaurantId }) => restaurantId)).toEqual(["b", "a", "c"]);
     expect(first.recommendations.map(({ rank }) => rank)).toEqual([1, 2, 3]);
@@ -110,7 +91,7 @@ describe("daily recommendations", () => {
       serviceDate: "2026-07-14",
     });
 
-    expect(assessor).toHaveBeenCalledTimes(4);
+    expect(assess).toHaveBeenCalledTimes(4);
     expect(repeated.recommendationSetId).toBe(first.recommendationSetId);
     expect(repeated.reusedRecommendationSet).toBe(true);
 
@@ -118,8 +99,8 @@ describe("daily recommendations", () => {
       ...items.slice(0, 3),
       sourceItem("d", "D-ravintola", "Hirvenfileetä ja paahdettuja juureksia"),
     ];
-    scores.set("d", 10);
-    await ingestLunchDay({ db, serviceDate: "2026-07-14", source });
+    scores.set("Hirvenfileetä ja paahdettuja juureksia", 10);
+    await catchment.refresh("2026-07-14");
 
     const changed = await assessAndRankDay({
       assessor,
@@ -127,23 +108,20 @@ describe("daily recommendations", () => {
       serviceDate: "2026-07-14",
     });
 
-    expect(assessor).toHaveBeenCalledTimes(5);
-    expect(assessor.mock.calls[4]?.[0].offerings).toHaveLength(1);
+    expect(assess).toHaveBeenCalledTimes(5);
+    expect(assess.mock.calls[4]?.[0]).toMatchObject({
+      menuText: "Hirvenfileetä ja paahdettuja juureksia",
+      serviceDate: "2026-07-14",
+    });
     expect(changed.createdAssessmentCount).toBe(1);
     expect(changed.recommendations.map(({ restaurantId }) => restaurantId)).toEqual(["d", "b", "a"]);
   });
 
   it("rolls back a recommendation set when its entries cannot be saved", async () => {
     const items = [sourceItem("a", "A-ravintola", "Kasviscurry")];
-    const source: LunchSource = {
-      fetchLunchDay: async (serviceDate) => ({
-        items,
-        pages: [{ body: JSON.stringify({ items }), status: 200, url: "fixture" }],
-        request: { latitude: 62.7907, longitude: 22.8396, maxDistance: 50_000, serviceDate },
-      }),
-    };
+    const lounaspaikka = catchmentAdapterForOfferings(items);
     db = openDatabase(":memory:");
-    await ingestLunchDay({ db, serviceDate: "2026-07-14", source });
+    await createRestaurantCatchment({ db, lounaspaikka }).refresh("2026-07-14");
     db.exec(`
       CREATE TRIGGER reject_recommendation_entries
       BEFORE INSERT ON recommendation_entries
@@ -154,13 +132,15 @@ describe("daily recommendations", () => {
 
     await expect(
       assessAndRankDay({
-        assessor: async ({ offerings }) =>
-          offerings.map((offering) => ({
-            rationaleFi: "Kiinnostava päivän lounas.",
-            revisionId: offering.revisionId,
-            scores: { appeal: 8, distinctiveness: 8, value: 8, variety: 8 },
-            structuredMenu: { courses: [] },
-          })),
+        assessor: {
+          assess: async () => ({
+            assessment: {
+              rationaleFi: "Kiinnostava päivän lounas.",
+              scores: { appeal: 8, distinctiveness: 8, value: 8, variety: 8 },
+              structuredMenu: { courses: [] },
+            },
+          }),
+        },
         db,
         serviceDate: "2026-07-14",
       }),
@@ -170,6 +150,36 @@ describe("daily recommendations", () => {
       count: number;
     };
     expect(count.count).toBe(0);
+  });
+
+  it("owns the request budget before crossing the assessment seam", async () => {
+    const items = [sourceItem("a", "A-ravintola", "Kasviscurry")];
+    const lounaspaikka = catchmentAdapterForOfferings(items);
+    db = openDatabase(":memory:");
+    await createRestaurantCatchment({ db, lounaspaikka }).refresh("2026-07-14");
+    const assess = vi.fn().mockRejectedValue(new Error("provider unavailable"));
+
+    await expect(
+      assessAndRankDay({
+        assessor: { assess },
+        budget: new OpenAiRequestBudget(0),
+        db,
+        serviceDate: "2026-07-14",
+      }),
+    ).rejects.toThrow("budget");
+    expect(assess).not.toHaveBeenCalled();
+
+    const budget = new OpenAiRequestBudget(1);
+    await expect(
+      assessAndRankDay({
+        assessor: { assess },
+        budget,
+        db,
+        serviceDate: "2026-07-14",
+      }),
+    ).rejects.toThrow("provider unavailable");
+    expect(assess).toHaveBeenCalledTimes(1);
+    expect(budget).toMatchObject({ remaining: 0, used: 1 });
   });
 });
 

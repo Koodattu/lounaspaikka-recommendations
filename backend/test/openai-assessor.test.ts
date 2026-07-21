@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createOpenAiAssessor } from "../src/openai-assessor.js";
-import { OpenAiRequestBudget } from "../src/openai-request-budget.js";
 
 describe("OpenAI lunch assessor", () => {
-  it("uses structured output with English instructions and short Finnish rationales", async () => {
+  it("uses an identity-blind structured request and returns provider metadata", async () => {
     const parse = vi.fn().mockResolvedValue({
       id: "resp_123",
       output_parsed: {
@@ -29,17 +28,10 @@ describe("OpenAI lunch assessor", () => {
       model: "gpt-5.4-nano",
     });
 
-    const result = await assessor({
-      offerings: [
-        {
-          lunchHours: "10.30–14",
-          menuText: "Paahdettua kuhaa ja perunoita",
-          priceText: "13,50 €",
-          restaurantId: "b",
-          restaurantName: "B-ravintola",
-          revisionId: 42,
-        },
-      ],
+    const result = await assessor.assess({
+      lunchHours: "10.30–14",
+      menuText: "Paahdettua kuhaa ja perunoita",
+      priceText: "13,50 €",
       serviceDate: "2026-07-14",
     });
 
@@ -60,99 +52,41 @@ describe("OpenAI lunch assessor", () => {
     expect(request.instructions).toContain("use a neutral 5 when no price is stated");
     expect(request.instructions).toContain("Never shorten it or stop mid-word");
     expect(request.input).toContain("Paahdettua kuhaa");
-    expect(request.input).not.toContain("B-ravintola");
+    expect(request.input).not.toContain("restaurantId");
+    expect(request.input).not.toContain("restaurantName");
     expect(request.input).not.toContain("revisionId");
     expect(request.max_output_tokens).toBe(1_200);
     expect(request.text.format.type).toBe("json_schema");
     expect(JSON.stringify(request.text.format)).toContain("structuredMenu");
     expect(result).toMatchObject({
-      assessments: [expect.objectContaining({ revisionId: 42 })],
-      inputTokens: 120,
-      outputTokens: 45,
-      providerResponseId: "resp_123",
+      assessment: {
+        rationaleFi: "Kuha tekee listasta tavallista kiinnostavamman.",
+      },
+      provider: {
+        inputTokens: 120,
+        outputTokens: 45,
+        providerResponseId: "resp_123",
+      },
     });
   });
 
-  it("rejects requests containing more than one restaurant", async () => {
-    const parse = vi.fn();
-    const assessor = createOpenAiAssessor({
-      apiKey: "test-key",
-      client: { responses: { parse } },
-      model: "gpt-5.6-luna",
-    });
-
-    await expect(
-      assessor({
-        offerings: [
-          {
-            lunchHours: null,
-            menuText: "Keitto",
-            priceText: null,
-            restaurantId: "a",
-            restaurantName: "A",
-            revisionId: 1,
-          },
-          {
-            lunchHours: null,
-            menuText: "Pasta",
-            priceText: null,
-            restaurantId: "b",
-            restaurantName: "B",
-            revisionId: 2,
-          },
-        ],
-        serviceDate: "2026-07-14",
-      }),
-    ).rejects.toThrow("exactly one offering");
-    expect(parse).not.toHaveBeenCalled();
-  });
-
-  it("does not call OpenAI after the request budget is exhausted", async () => {
-    const parse = vi.fn();
+  it("rejects missing structured output and propagates provider failures", async () => {
+    const parse = vi
+      .fn()
+      .mockResolvedValueOnce({ id: "empty", output_parsed: null })
+      .mockRejectedValueOnce(new Error("provider unavailable"));
     const assessor = createOpenAiAssessor({
       apiKey: "test-key",
       client: { responses: { parse } },
     });
+    const facts = {
+      lunchHours: null,
+      menuText: "Keitto",
+      priceText: null,
+      serviceDate: "2026-07-14",
+    };
 
-    await expect(
-      assessor({
-        budget: new OpenAiRequestBudget(0),
-        offerings: [{
-          lunchHours: null,
-          menuText: "Keitto",
-          priceText: null,
-          restaurantId: "a",
-          restaurantName: "A",
-          revisionId: 1,
-        }],
-        serviceDate: "2026-07-14",
-      }),
-    ).rejects.toThrow("budget");
-    expect(parse).not.toHaveBeenCalled();
-  });
-
-  it("consumes a request even when OpenAI rejects it", async () => {
-    const budget = new OpenAiRequestBudget(1);
-    const parse = vi.fn().mockRejectedValue(new Error("provider unavailable"));
-    const assessor = createOpenAiAssessor({
-      apiKey: "test-key",
-      client: { responses: { parse } },
-    });
-
-    await expect(
-      assessor({
-        budget,
-        offerings: [{
-          lunchHours: null,
-          menuText: "Keitto",
-          priceText: null,
-          restaurantId: "a",
-          restaurantName: "A",
-          revisionId: 1,
-        }],
-        serviceDate: "2026-07-14",
-      }),
-    ).rejects.toThrow("provider unavailable");
-    expect(budget).toMatchObject({ remaining: 0, used: 1 });
+    await expect(assessor.assess(facts)).rejects.toThrow("did not return");
+    await expect(assessor.assess(facts)).rejects.toThrow("provider unavailable");
   });
 });

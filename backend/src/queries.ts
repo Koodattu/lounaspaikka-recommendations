@@ -1,5 +1,9 @@
 import type Database from "better-sqlite3";
 
+import {
+  getDailyOfferingSnapshot,
+  type DailyOfferingSnapshotEntry,
+} from "./daily-offering-snapshot.js";
 import { addDays } from "./dates.js";
 import {
   defaultRecommendationVersions,
@@ -33,27 +37,6 @@ export interface DayMenu {
   };
 }
 
-interface DayMenuRow {
-  address: string | null;
-  availability: string;
-  city: string | null;
-  custom_source_id: number | null;
-  custom_source_url: string | null;
-  fetched_at: string;
-  id: string;
-  latitude: number | null;
-  longitude: number | null;
-  lunch_hours: string | null;
-  menu_text: string | null;
-  menu_title: string | null;
-  name: string;
-  phone: string | null;
-  photo_url: string | null;
-  price_text: string | null;
-  structured_menu_json: string | null;
-  website_url: string | null;
-}
-
 function parseStructuredMenu(value: string | null): StructuredMenu | null {
   if (!value) return null;
   try {
@@ -64,81 +47,86 @@ function parseStructuredMenu(value: string | null): StructuredMenu | null {
   }
 }
 
+function sourceFor(entry: DailyOfferingSnapshotEntry): DayMenu["menu"]["source"] {
+  return entry.restaurant.customSourceId
+    ? { name: entry.restaurant.name, url: entry.restaurant.customSourceUrl! }
+    : { name: "Lounaspaikka", url: "https://lounaspaikka.ilkkapohjalainen.fi/" };
+}
+
+function restaurantFor(entry: DailyOfferingSnapshotEntry): DayMenu["restaurant"] {
+  return {
+    address: entry.restaurant.address,
+    city: entry.restaurant.city,
+    id: entry.restaurant.id,
+    latitude: entry.restaurant.latitude,
+    longitude: entry.restaurant.longitude,
+    name: entry.restaurant.name,
+    phone: entry.restaurant.phone,
+    photoUrl: entry.restaurant.photoUrl,
+    websiteUrl: entry.restaurant.websiteUrl,
+  };
+}
+
+function menuFor(
+  entry: DailyOfferingSnapshotEntry,
+  structuredMenu: StructuredMenu | null,
+): DayMenu["menu"] {
+  return {
+    lunchHours: entry.offering.lunchHours,
+    priceText: entry.offering.priceText,
+    source: sourceFor(entry),
+    status: entry.offering.availability,
+    structuredMenu,
+    text: entry.offering.menuText,
+    title: entry.offering.menuTitle,
+  };
+}
+
+function structuredMenusFor(
+  db: Database.Database,
+  revisionIds: number[],
+  versions: RecommendationVersions,
+): Map<number, StructuredMenu | null> {
+  if (revisionIds.length === 0) return new Map();
+  const placeholders = revisionIds.map(() => "?").join(", ");
+  const rows = db
+    .prepare(
+      `SELECT revision_id AS revisionId, structured_menu_json AS structuredMenuJson
+       FROM assessments
+       WHERE revision_id IN (${placeholders})
+         AND profile_version = ? AND rubric_version = ? AND prompt_version = ?
+         AND schema_version = ? AND model = ?`,
+    )
+    .all(
+      ...revisionIds,
+      versions.profileVersion,
+      versions.rubricVersion,
+      versions.promptVersion,
+      versions.schemaVersion,
+      versions.model,
+    ) as Array<{ revisionId: number; structuredMenuJson: string | null }>;
+  return new Map(
+    rows.map((row) => [row.revisionId, parseStructuredMenu(row.structuredMenuJson)]),
+  );
+}
+
 export function getDayMenus(
   db: Database.Database,
   serviceDate: string,
   versionOverrides: Partial<RecommendationVersions> = {},
 ): DayMenu[] {
   const versions = { ...defaultRecommendationVersions, ...versionOverrides };
-  const rows = db
-    .prepare(
-      `WITH active_sources(custom_source_id) AS (
-        SELECT NULL
-        UNION ALL
-        SELECT id FROM custom_sources WHERE enabled = 1
-      ), latest_fetches AS (
-        SELECT (
-          SELECT fetch.id
-          FROM source_fetches fetch
-          WHERE fetch.service_date = ? AND fetch.outcome = 'success'
-            AND fetch.custom_source_id IS active_sources.custom_source_id
-          ORDER BY fetch.id DESC
-          LIMIT 1
-        ) AS id
-        FROM active_sources
-      )
-      SELECT
-        r.id, r.name, r.address, r.city, r.latitude, r.longitude,
-        r.website_url, r.phone, r.photo_url, r.custom_source_id,
-        custom_source.url AS custom_source_url,
-        o.availability, o.menu_title, o.menu_text, o.lunch_hours, o.price_text,
-        assessment.structured_menu_json,
-        fetch.finished_at AS fetched_at
-      FROM latest_fetches
-      JOIN source_fetches fetch ON fetch.id = latest_fetches.id
-      JOIN fetch_observations observation ON observation.fetch_id = fetch.id
-      JOIN offering_revisions o ON o.id = observation.revision_id
-      JOIN restaurants r ON r.id = observation.restaurant_id
-      LEFT JOIN custom_sources custom_source ON custom_source.id = r.custom_source_id
-      LEFT JOIN assessments assessment ON assessment.revision_id = o.id
-        AND assessment.profile_version = ? AND assessment.rubric_version = ?
-        AND assessment.prompt_version = ? AND assessment.schema_version = ?
-        AND assessment.model = ?
-      ORDER BY r.name COLLATE NOCASE, r.id`,
-    )
-    .all(
-      serviceDate,
-      versions.profileVersion,
-      versions.rubricVersion,
-      versions.promptVersion,
-      versions.schemaVersion,
-      versions.model,
-    ) as DayMenuRow[];
+  const snapshot = getDailyOfferingSnapshot(db, serviceDate);
+  const structuredMenus = structuredMenusFor(
+    db,
+    snapshot.entries.map((entry) => entry.revisionId),
+    versions,
+  );
 
-  return rows.map((row) => ({
-    fetchedAt: row.fetched_at,
-    menu: {
-      lunchHours: row.lunch_hours,
-      priceText: row.price_text,
-      source: row.custom_source_id
-        ? { name: row.name, url: row.custom_source_url! }
-        : { name: "Lounaspaikka", url: "https://lounaspaikka.ilkkapohjalainen.fi/" },
-      status: row.availability,
-      structuredMenu: parseStructuredMenu(row.structured_menu_json),
-      text: row.menu_text,
-      title: row.menu_title,
-    },
-    restaurant: {
-      address: row.address,
-      city: row.city,
-      id: row.id,
-      latitude: row.latitude,
-      longitude: row.longitude,
-      name: row.name,
-      phone: row.phone,
-      photoUrl: row.photo_url,
-      websiteUrl: row.website_url,
-    },
+  return snapshot.entries.map((entry) => ({
+    fetchedAt: entry.fetchedAt,
+    menu: menuFor(entry, structuredMenus.get(entry.revisionId) ?? null),
+    restaurant: restaurantFor(entry),
   }));
 }
 
@@ -220,32 +208,13 @@ export function getDailyRecommendations(
   versionOverrides: Partial<RecommendationVersions> = {},
 ): { generatedAt: string | null; recommendations: DailyRecommendation[] } {
   const versions = { ...defaultRecommendationVersions, ...versionOverrides };
-  const currentRevisions = db
-    .prepare(
-      `WITH active_sources(custom_source_id) AS (
-        SELECT NULL
-        UNION ALL
-        SELECT id FROM custom_sources WHERE enabled = 1
-      ), latest_fetches AS (
-        SELECT (
-          SELECT fetch.id FROM source_fetches fetch
-          WHERE fetch.service_date = ? AND fetch.outcome = 'success'
-            AND fetch.custom_source_id IS active_sources.custom_source_id
-          ORDER BY fetch.id DESC LIMIT 1
-        ) AS id
-        FROM active_sources
-      )
-      SELECT revision.id
-      FROM latest_fetches
-      JOIN fetch_observations observation ON observation.fetch_id = latest_fetches.id
-      JOIN offering_revisions revision ON revision.id = observation.revision_id
-      WHERE revision.availability = 'published' AND revision.menu_text IS NOT NULL
-      ORDER BY revision.id`,
-    )
-    .all(serviceDate) as Array<{ id: number }>;
-  if (currentRevisions.length === 0) return { generatedAt: null, recommendations: [] };
+  const snapshot = getDailyOfferingSnapshot(db, serviceDate);
+  const currentEntries = snapshot.entries.filter(
+    (entry) => entry.offering.availability === "published" && entry.offering.menuText !== null,
+  );
+  if (currentEntries.length === 0) return { generatedAt: null, recommendations: [] };
 
-  const placeholders = currentRevisions.map(() => "?").join(", ");
+  const placeholders = currentEntries.map(() => "?").join(", ");
   const assessments = db
     .prepare(
       `SELECT id AS assessment_id, total_score
@@ -255,14 +224,14 @@ export function getDailyRecommendations(
          AND schema_version = ? AND model = ?`,
     )
     .all(
-      ...currentRevisions.map((revision) => revision.id),
+      ...currentEntries.map((entry) => entry.revisionId),
       versions.profileVersion,
       versions.rubricVersion,
       versions.promptVersion,
       versions.schemaVersion,
       versions.model,
     ) as Array<{ assessment_id: number; total_score: number }>;
-  if (assessments.length !== currentRevisions.length) {
+  if (assessments.length !== currentEntries.length) {
     return { generatedAt: null, recommendations: [] };
   }
 
@@ -287,53 +256,37 @@ export function getDailyRecommendations(
         entry.rank,
         assessment.total_score AS score,
         assessment.rationale_fi AS rationale,
-        restaurant.id, restaurant.name, restaurant.address, restaurant.city,
-        restaurant.latitude, restaurant.longitude, restaurant.website_url,
-        restaurant.phone, restaurant.photo_url, restaurant.custom_source_id,
-        custom_source.url AS custom_source_url,
-        revision.availability, revision.menu_title, revision.menu_text,
-        revision.lunch_hours, revision.price_text, assessment.structured_menu_json
+        assessment.revision_id AS revisionId,
+        assessment.structured_menu_json AS structuredMenuJson
       FROM recommendation_entries entry
       JOIN assessments assessment ON assessment.id = entry.assessment_id
-      JOIN offering_revisions revision ON revision.id = assessment.revision_id
-      JOIN restaurants restaurant ON restaurant.id = revision.restaurant_id
-      LEFT JOIN custom_sources custom_source ON custom_source.id = restaurant.custom_source_id
       WHERE entry.set_id = ?
       ORDER BY entry.rank`,
     )
-    .all(set.id) as Array<
-    Omit<DayMenuRow, "fetched_at"> & { rank: number; rationale: string; score: number }
-  >;
+    .all(set.id) as Array<{
+      rank: number;
+      rationale: string;
+      revisionId: number;
+      score: number;
+      structuredMenuJson: string | null;
+    }>;
+  const entriesByRevision = new Map(
+    currentEntries.map((entry) => [entry.revisionId, entry]),
+  );
 
   return {
     generatedAt: set.created_at,
-    recommendations: rows.map((row) => ({
-      menu: {
-        lunchHours: row.lunch_hours,
-        priceText: row.price_text,
-        source: row.custom_source_id
-          ? { name: row.name, url: row.custom_source_url! }
-          : { name: "Lounaspaikka", url: "https://lounaspaikka.ilkkapohjalainen.fi/" },
-        status: row.availability,
-        structuredMenu: parseStructuredMenu(row.structured_menu_json),
-        text: row.menu_text,
-        title: row.menu_title,
-      },
-      rank: row.rank,
-      rationale: row.rationale,
-      restaurant: {
-        address: row.address,
-        city: row.city,
-        id: row.id,
-        latitude: row.latitude,
-        longitude: row.longitude,
-        name: row.name,
-        phone: row.phone,
-        photoUrl: row.photo_url,
-        websiteUrl: row.website_url,
-      },
-      score: row.score,
-    })),
+    recommendations: rows.map((row) => {
+      const entry = entriesByRevision.get(row.revisionId);
+      if (!entry) throw new Error("Recommendation entry is outside the daily offering snapshot");
+      return {
+        menu: menuFor(entry, parseStructuredMenu(row.structuredMenuJson)),
+        rank: row.rank,
+        rationale: row.rationale,
+        restaurant: restaurantFor(entry),
+        score: row.score,
+      };
+    }),
   };
 }
 

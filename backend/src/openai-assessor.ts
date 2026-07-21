@@ -4,11 +4,10 @@ import { z } from "zod";
 
 import {
   assessmentSchema,
-  type AssessmentRequest,
-  type Assessor,
+  type AssessmentAdapter,
 } from "./recommendations.js";
 
-const outputSchema = assessmentSchema.omit({ revisionId: true });
+const outputSchema = assessmentSchema;
 
 interface ParsedResponse {
   id: string;
@@ -52,7 +51,7 @@ Normalize the published food into structuredMenu.courses:
 - Copy explicitAllergens only when the source explicitly identifies them as allergens for that course. Never infer allergens from a dish name, an ingredient mention, or likely ingredients. Dietary markers are not allergens. Empty arrays mean not stated, never allergen-free.
 - Return an empty courses array when the text does not offer an actual lunch.`;
 
-export function createOpenAiAssessor(options: OpenAiAssessorOptions): Assessor {
+export function createOpenAiAssessor(options: OpenAiAssessorOptions): AssessmentAdapter {
   const model = options.model ?? "gpt-5.4-nano";
   const client =
     options.client ??
@@ -62,39 +61,38 @@ export function createOpenAiAssessor(options: OpenAiAssessorOptions): Assessor {
       timeout: 60_000,
     }) as unknown as OpenAiClientLike);
 
-  return async (request: AssessmentRequest) => {
-    if (request.offerings.length !== 1) {
-      throw new Error("OpenAI assessor expects exactly one offering");
-    }
-    const offering = request.offerings[0]!;
-    request.budget?.consume();
-    const response = await client.responses.parse({
-      input: JSON.stringify({
-        offering: {
-          hours: offering.lunchHours,
-          menu: offering.menuText,
-          price: offering.priceText,
+  return {
+    async assess(facts) {
+      const response = await client.responses.parse({
+        input: JSON.stringify({
+          offering: {
+            hours: facts.lunchHours,
+            menu: facts.menuText,
+            price: facts.priceText,
+          },
+          serviceDate: facts.serviceDate,
+        }),
+        instructions,
+        max_output_tokens: 1_200,
+        model,
+        reasoning: { effort: "low" },
+        store: false,
+        text: {
+          format: zodTextFormat(outputSchema, "lunch_assessments"),
         },
-        serviceDate: request.serviceDate,
-      }),
-      instructions,
-      max_output_tokens: 1_200,
-      model,
-      reasoning: { effort: "low" },
-      store: false,
-      text: {
-        format: zodTextFormat(outputSchema, "lunch_assessments"),
-      },
-    });
-    if (!response.output_parsed) {
-      throw new Error("OpenAI did not return lunch assessments");
-    }
+      });
+      if (!response.output_parsed) {
+        throw new Error("OpenAI did not return lunch assessments");
+      }
 
-    return {
-      assessments: [{ ...response.output_parsed, revisionId: offering.revisionId }],
-      inputTokens: response.usage?.input_tokens ?? null,
-      outputTokens: response.usage?.output_tokens ?? null,
-      providerResponseId: response.id,
-    };
+      return {
+        assessment: response.output_parsed,
+        provider: {
+          inputTokens: response.usage?.input_tokens ?? null,
+          outputTokens: response.usage?.output_tokens ?? null,
+          providerResponseId: response.id,
+        },
+      };
+    },
   };
 }

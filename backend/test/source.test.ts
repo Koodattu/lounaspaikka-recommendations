@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createLounaspaikkaClient, SourceFetchError } from "../src/source.js";
+import {
+  createLounaspaikkaCatchmentAdapter,
+  LounaspaikkaCatchmentObservationError,
+} from "../src/lounaspaikka-catchment.js";
 
 function jsonResponse(items: unknown[], init: ResponseInit = {}): Response {
   return new Response(JSON.stringify({ items }), {
@@ -10,6 +13,30 @@ function jsonResponse(items: unknown[], init: ResponseInit = {}): Response {
 }
 
 describe("Lounaspaikka client limits", () => {
+  it("classifies malformed restaurant translations as invalid responses", async () => {
+    const dailyMenu = { body: "Lounas", contentType: 32 };
+    const invalidRestaurants = [
+      { name: "Missing id" },
+      {
+        ads: [{ ad: dailyMenu }, { ad: { ...dailyMenu, body: "Toinen lounas" } }],
+        id: "duplicate-menu",
+        name: "Duplicate menu",
+      },
+    ];
+
+    for (const restaurant of invalidRestaurants) {
+      const adapter = createLounaspaikkaCatchmentAdapter({
+        fetchImpl: async () => jsonResponse([restaurant]),
+      });
+
+      await expect(adapter.observe("2026-07-20")).rejects.toMatchObject({
+        httpStatus: 200,
+        outcome: "invalid_response",
+        pages: [expect.objectContaining({ status: 200 })],
+      });
+    }
+  });
+
   it("follows only bounded same-origin redirects manually", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -20,9 +47,9 @@ describe("Lounaspaikka client limits", () => {
         }),
       )
       .mockResolvedValueOnce(jsonResponse([]));
-    const client = createLounaspaikkaClient({ fetchImpl });
+    const client = createLounaspaikkaCatchmentAdapter({ fetchImpl });
 
-    const result = await client.fetchLunchDay("2026-07-20");
+    const result = await client.observe("2026-07-20");
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(fetchImpl.mock.calls.every(([, init]) => init?.redirect === "manual")).toBe(true);
@@ -36,19 +63,19 @@ describe("Lounaspaikka client limits", () => {
         status: 302,
       }),
     );
-    const client = createLounaspaikkaClient({ fetchImpl });
+    const client = createLounaspaikkaCatchmentAdapter({ fetchImpl });
 
-    await expect(client.fetchLunchDay("2026-07-20")).rejects.toMatchObject({
+    await expect(client.observe("2026-07-20")).rejects.toMatchObject({
       outcome: "invalid_response",
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("rejects missing redirect locations and redirect-limit exhaustion", async () => {
-    const missingLocation = createLounaspaikkaClient({
+    const missingLocation = createLounaspaikkaCatchmentAdapter({
       fetchImpl: async () => new Response(null, { status: 302 }),
     });
-    await expect(missingLocation.fetchLunchDay("2026-07-20")).rejects.toMatchObject({
+    await expect(missingLocation.observe("2026-07-20")).rejects.toMatchObject({
       outcome: "http_error",
     });
 
@@ -58,25 +85,25 @@ describe("Lounaspaikka client limits", () => {
         status: 302,
       }),
     );
-    const noRedirects = createLounaspaikkaClient({ fetchImpl, maxRedirects: 0 });
-    await expect(noRedirects.fetchLunchDay("2026-07-20")).rejects.toThrow(
+    const noRedirects = createLounaspaikkaCatchmentAdapter({ fetchImpl, maxRedirects: 0 });
+    await expect(noRedirects.observe("2026-07-20")).rejects.toThrow(
       "too many redirects",
     );
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("enforces per-page and total response byte limits", async () => {
-    const oversizedPage = createLounaspaikkaClient({
+    const oversizedPage = createLounaspaikkaCatchmentAdapter({
       fetchImpl: async () =>
         jsonResponse([], { headers: { "content-length": "101" } }),
       maxBytesPerPage: 100,
     });
-    await expect(oversizedPage.fetchLunchDay("2026-07-20")).rejects.toThrow(
+    await expect(oversizedPage.observe("2026-07-20")).rejects.toThrow(
       "response is too large",
     );
 
     const cancel = vi.fn();
-    const streamedPage = createLounaspaikkaClient({
+    const streamedPage = createLounaspaikkaCatchmentAdapter({
       fetchImpl: async () =>
         new Response(
           new ReadableStream({
@@ -90,7 +117,7 @@ describe("Lounaspaikka client limits", () => {
         ),
       maxBytesPerPage: 100,
     });
-    await expect(streamedPage.fetchLunchDay("2026-07-20")).rejects.toThrow(
+    await expect(streamedPage.observe("2026-07-20")).rejects.toThrow(
       "response is too large",
     );
     expect(cancel).toHaveBeenCalled();
@@ -113,46 +140,46 @@ describe("Lounaspaikka client limits", () => {
           { headers: { "content-type": "application/json" } },
         ),
       );
-    const totalBytes = createLounaspaikkaClient({
+    const totalBytes = createLounaspaikkaCatchmentAdapter({
       fetchImpl,
       maxTotalBytes: firstBodySize + 10,
     });
 
-    await expect(totalBytes.fetchLunchDay("2026-07-20")).rejects.toThrow(
+    await expect(totalBytes.observe("2026-07-20")).rejects.toThrow(
       "total size limit",
     );
     expect(totalCancel).toHaveBeenCalled();
 
     const boundaryBody = JSON.stringify({ items: [] });
-    const boundary = createLounaspaikkaClient({
+    const boundary = createLounaspaikkaCatchmentAdapter({
       fetchImpl: async () => jsonResponse([]),
       maxBytesPerPage: boundaryBody.length,
       maxTotalBytes: boundaryBody.length,
     });
-    await expect(boundary.fetchLunchDay("2026-07-20")).resolves.toMatchObject({
-      items: [],
+    await expect(boundary.observe("2026-07-20")).resolves.toMatchObject({
+      offerings: [],
     });
   });
 
   it("enforces page and item limits before requesting more data", async () => {
     const fullPage = Array.from({ length: 100 }, (_, id) => ({ id }));
     const pageFetch = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(fullPage));
-    const pageLimited = createLounaspaikkaClient({
+    const pageLimited = createLounaspaikkaCatchmentAdapter({
       fetchImpl: pageFetch,
       maxPages: 1,
     });
 
-    await expect(pageLimited.fetchLunchDay("2026-07-20")).rejects.toThrow(
+    await expect(pageLimited.observe("2026-07-20")).rejects.toThrow(
       "too many pages",
     );
     expect(pageFetch).toHaveBeenCalledTimes(1);
 
-    const itemLimited = createLounaspaikkaClient({
+    const itemLimited = createLounaspaikkaCatchmentAdapter({
       fetchImpl: async () => jsonResponse([{ id: 1 }, { id: 2 }]),
       maxItems: 1,
     });
-    const error = await itemLimited.fetchLunchDay("2026-07-20").catch((value) => value);
-    expect(error).toBeInstanceOf(SourceFetchError);
+    const error = await itemLimited.observe("2026-07-20").catch((value) => value);
+    expect(error).toBeInstanceOf(LounaspaikkaCatchmentObservationError);
     expect(error).toMatchObject({ outcome: "invalid_response" });
   });
 });

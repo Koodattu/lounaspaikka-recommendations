@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import { z } from "zod";
 
+import { getDailyOfferingSnapshot } from "./daily-offering-snapshot.js";
 import type { OpenAiRequestBudget } from "./openai-request-budget.js";
 
 const scoreSchema = z.number().min(0).max(10);
@@ -31,7 +32,6 @@ export type StructuredMenu = z.infer<typeof structuredMenuSchema>;
 
 export const assessmentSchema = z.object({
   rationaleFi: z.string().trim().min(5).max(180),
-  revisionId: z.number().int().positive(),
   scores: z.object({
     appeal: scoreSchema,
     distinctiveness: scoreSchema,
@@ -41,28 +41,26 @@ export const assessmentSchema = z.object({
   structuredMenu: structuredMenuSchema,
 });
 
-export interface AssessmentOffering {
+export interface AssessmentFacts {
   lunchHours: string | null;
   menuText: string;
   priceText: string | null;
-  restaurantId: string;
-  restaurantName: string;
-  revisionId: number;
-}
-
-export interface AssessmentRequest {
-  budget?: OpenAiRequestBudget;
-  offerings: AssessmentOffering[];
   serviceDate: string;
 }
 
-export type Assessor = (request: AssessmentRequest) => Promise<unknown>;
-
-interface AssessorEnvelope {
-  assessments: unknown;
+export interface AssessmentProviderMetadata {
   inputTokens?: number | null;
   outputTokens?: number | null;
   providerResponseId?: string | null;
+}
+
+export interface AssessmentAdapterResult {
+  assessment: unknown;
+  provider?: AssessmentProviderMetadata;
+}
+
+export interface AssessmentAdapter {
+  assess(facts: AssessmentFacts): Promise<AssessmentAdapterResult>;
 }
 
 export interface RecommendationVersions {
@@ -75,7 +73,7 @@ export interface RecommendationVersions {
 }
 
 interface AssessAndRankDayOptions {
-  assessor: Assessor;
+  assessor: AssessmentAdapter;
   budget?: OpenAiRequestBudget;
   db: Database.Database;
   now?: () => Date;
@@ -147,36 +145,25 @@ function latestPublishedOfferings(
   db: Database.Database,
   serviceDate: string,
 ): CandidateRow[] {
-  return db
-    .prepare(
-      `WITH active_sources(custom_source_id) AS (
-        SELECT NULL
-        UNION ALL
-        SELECT id FROM custom_sources WHERE enabled = 1
-      ), latest_fetches AS (
-        SELECT (
-          SELECT fetch.id FROM source_fetches fetch
-          WHERE fetch.service_date = ? AND fetch.outcome = 'success'
-            AND fetch.custom_source_id IS active_sources.custom_source_id
-          ORDER BY fetch.id DESC LIMIT 1
-        ) AS id
-        FROM active_sources
-      )
-      SELECT
-        revision.id AS revision_id,
-        restaurant.id AS restaurant_id,
-        restaurant.name AS restaurant_name,
-        revision.menu_text,
-        revision.lunch_hours,
-        revision.price_text
-      FROM latest_fetches
-      JOIN fetch_observations observation ON observation.fetch_id = latest_fetches.id
-      JOIN offering_revisions revision ON revision.id = observation.revision_id
-      JOIN restaurants restaurant ON restaurant.id = observation.restaurant_id
-      WHERE revision.availability = 'published' AND revision.menu_text IS NOT NULL
-      ORDER BY restaurant.id`,
+  return getDailyOfferingSnapshot(db, serviceDate).entries
+    .filter(
+      (entry) => entry.offering.availability === "published" && entry.offering.menuText !== null,
     )
-    .all(serviceDate) as CandidateRow[];
+    .map((entry) => ({
+      lunch_hours: entry.offering.lunchHours,
+      menu_text: entry.offering.menuText!,
+      price_text: entry.offering.priceText,
+      restaurant_id: entry.restaurant.id,
+      restaurant_name: entry.restaurant.name,
+      revision_id: entry.revisionId,
+    }))
+    .sort((first, second) =>
+      first.restaurant_id < second.restaurant_id
+        ? -1
+        : first.restaurant_id > second.restaurant_id
+          ? 1
+          : 0,
+    );
 }
 
 function findAssessments(
@@ -251,31 +238,16 @@ export async function assessAndRankDay(
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const offering of unseen) {
-      const rawOutput = await options.assessor({
-        budget: options.budget,
-        offerings: [
-          {
-            lunchHours: offering.lunch_hours,
-            menuText: offering.menu_text,
-            priceText: offering.price_text,
-            restaurantId: offering.restaurant_id,
-            restaurantName: offering.restaurant_name,
-            revisionId: offering.revision_id,
-          },
-        ],
+      options.budget?.consume();
+      const result = await options.assessor.assess({
+        lunchHours: offering.lunch_hours,
+        menuText: offering.menu_text,
+        priceText: offering.price_text,
         serviceDate: options.serviceDate,
       });
-      const envelope =
-        typeof rawOutput === "object" && rawOutput !== null && "assessments" in rawOutput
-          ? (rawOutput as AssessorEnvelope)
-          : null;
-      const output = z.array(assessmentSchema).length(1).parse(envelope?.assessments ?? rawOutput);
-      const assessment = output[0]!;
-      if (assessment.revisionId !== offering.revision_id) {
-        throw new Error("Assessor output does not match requested revision");
-      }
+      const assessment = assessmentSchema.parse(result.assessment);
       insert.run(
-        assessment.revisionId,
+        offering.revision_id,
         versions.profileVersion,
         versions.rubricVersion,
         versions.promptVersion,
@@ -285,9 +257,9 @@ export async function assessAndRankDay(
         totalScore(assessment.scores),
         assessment.rationaleFi,
         JSON.stringify(assessment.structuredMenu),
-        envelope?.providerResponseId ?? null,
-        envelope?.inputTokens ?? null,
-        envelope?.outputTokens ?? null,
+        result.provider?.providerResponseId ?? null,
+        result.provider?.inputTokens ?? null,
+        result.provider?.outputTokens ?? null,
         now().toISOString(),
       );
       createdAssessmentCount += 1;

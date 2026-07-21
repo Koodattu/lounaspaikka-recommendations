@@ -52,7 +52,6 @@ export interface MenuExtractorResult {
 }
 
 export type MenuExtractor = (request: {
-  budget?: OpenAiRequestBudget;
   pageText: string;
   serviceDates: string[];
   url: string;
@@ -82,11 +81,20 @@ interface CustomSourceRow {
   url: string;
 }
 
-interface CrawlResult {
+export interface CrawlResult {
   createdRevisionCount: number;
   restaurantId: string;
   reusedExtraction: boolean;
   sourceId: number;
+}
+
+export interface CustomSourceService {
+  addAndCrawl(
+    url: string,
+    serviceDates: string[],
+    budget?: OpenAiRequestBudget,
+  ): Promise<CrawlResult>;
+  crawlAll(serviceDates: string[], budget?: OpenAiRequestBudget): Promise<void>;
 }
 
 class CustomSourceError extends Error {
@@ -217,14 +225,7 @@ function ensureSource(db: Database.Database, url: string, createdAt: string): Cu
   return source;
 }
 
-export function createCustomSourceService(options: CustomSourceServiceOptions): {
-  addAndCrawl: (
-    url: string,
-    serviceDates: string[],
-    budget?: OpenAiRequestBudget,
-  ) => Promise<CrawlResult>;
-  crawlAll: (serviceDates: string[], budget?: OpenAiRequestBudget) => Promise<void>;
-} {
+export function createCustomSourceService(options: CustomSourceServiceOptions): CustomSourceService {
   const now = options.now ?? (() => new Date());
   const promptVersion = options.promptVersion ?? "custom-menu-v1";
 
@@ -279,8 +280,8 @@ export function createCustomSourceService(options: CustomSourceServiceOptions): 
         extraction = cachedExtraction;
         extractorResult = { extraction };
       } else {
+        budget?.consume();
         extractorResult = await options.extractor({
-          budget,
           pageText: fetchedPage.text,
           serviceDates,
           url: source.url,

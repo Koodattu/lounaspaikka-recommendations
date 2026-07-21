@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 
+import { getDailyOfferingSnapshots } from "./daily-offering-snapshot.js";
 import {
   defaultRecommendationVersions,
   type RecommendationVersions,
@@ -32,6 +33,101 @@ function operationalErrorMessage(outcome: string | null, httpStatus: number | nu
     default:
       return "Keräys epäonnistui.";
   }
+}
+
+interface RecentAssessmentRow {
+  assessedAt: string;
+  assessmentId: number;
+  feedbackDirection: "higher" | "lower" | null;
+  menuText: string | null;
+  rationale: string;
+  restaurantId: string;
+  restaurantName: string;
+  score: number;
+  scoresJson: string;
+  serviceDate: string;
+}
+
+function getRecentAssessments(
+  db: Database.Database,
+  versions: RecommendationVersions,
+): RecentAssessmentRow[] {
+  const assessmentDates = db
+    .prepare(
+      `SELECT DISTINCT revision.service_date AS serviceDate
+       FROM assessments assessment
+       JOIN offering_revisions revision ON revision.id = assessment.revision_id
+       WHERE assessment.profile_version = ?
+         AND assessment.rubric_version = ?
+         AND assessment.prompt_version = ?
+         AND assessment.schema_version = ?
+         AND assessment.model = ?
+       ORDER BY revision.service_date DESC`,
+    )
+    .all(
+      versions.profileVersion,
+      versions.rubricVersion,
+      versions.promptVersion,
+      versions.schemaVersion,
+      versions.model,
+    ) as Array<{ serviceDate: string }>;
+  const snapshots = getDailyOfferingSnapshots(
+    db,
+    assessmentDates.map(({ serviceDate }) => serviceDate),
+  );
+  const recent: RecentAssessmentRow[] = [];
+  let activeDateCount = 0;
+
+  for (const snapshot of snapshots) {
+    const revisionIds = snapshot.entries
+      .filter(
+        (entry) =>
+          entry.offering.availability === "published" && entry.offering.menuText !== null,
+      )
+      .map((entry) => entry.revisionId);
+    if (revisionIds.length === 0) continue;
+    const placeholders = revisionIds.map(() => "?").join(", ");
+    const rows = db
+      .prepare(
+        `SELECT
+          assessment.id AS assessmentId,
+          assessment.assessed_at AS assessedAt,
+          assessment.rationale_fi AS rationale,
+          assessment.scores_json AS scoresJson,
+          assessment.total_score AS score,
+          feedback.direction AS feedbackDirection,
+          restaurant.id AS restaurantId,
+          restaurant.name AS restaurantName,
+          revision.menu_text AS menuText,
+          revision.service_date AS serviceDate
+         FROM assessments assessment
+         JOIN offering_revisions revision ON revision.id = assessment.revision_id
+         JOIN restaurants restaurant ON restaurant.id = revision.restaurant_id
+         LEFT JOIN assessment_feedback feedback ON feedback.assessment_id = assessment.id
+         WHERE assessment.revision_id IN (${placeholders})
+           AND assessment.profile_version = ?
+           AND assessment.rubric_version = ?
+           AND assessment.prompt_version = ?
+           AND assessment.schema_version = ?
+           AND assessment.model = ?
+         ORDER BY assessment.total_score DESC,
+           restaurant.name COLLATE NOCASE, assessment.id DESC`,
+      )
+      .all(
+        ...revisionIds,
+        versions.profileVersion,
+        versions.rubricVersion,
+        versions.promptVersion,
+        versions.schemaVersion,
+        versions.model,
+      ) as RecentAssessmentRow[];
+    if (rows.length === 0) continue;
+    recent.push(...rows);
+    activeDateCount += 1;
+    if (activeDateCount === 8) break;
+  }
+
+  return recent;
 }
 
 export function getAdminOverview(db: Database.Database, options: AdminOverviewOptions) {
@@ -69,85 +165,7 @@ export function getAdminOverview(db: Database.Database, options: AdminOverviewOp
       restaurantName: string | null;
       url: string;
     }>;
-  const recentAssessments = db
-    .prepare(
-      `WITH active_assessments AS (
-        SELECT * FROM assessments
-        WHERE profile_version = ?
-          AND rubric_version = ?
-          AND prompt_version = ?
-          AND schema_version = ?
-          AND model = ?
-       ), assessment_dates AS (
-        SELECT DISTINCT revision.service_date
-        FROM active_assessments assessment
-        JOIN offering_revisions revision ON revision.id = assessment.revision_id
-       ), active_sources(custom_source_id) AS (
-        SELECT NULL
-        UNION ALL
-        SELECT id FROM custom_sources WHERE enabled = 1
-       ), latest_fetches AS (
-        SELECT (
-          SELECT fetch.id FROM source_fetches fetch
-          WHERE fetch.service_date = assessment_dates.service_date
-            AND fetch.outcome = 'success'
-            AND fetch.custom_source_id IS active_sources.custom_source_id
-          ORDER BY fetch.id DESC LIMIT 1
-        ) AS id
-        FROM assessment_dates CROSS JOIN active_sources
-       ), current_revisions AS (
-        SELECT DISTINCT observation.revision_id
-        FROM latest_fetches
-        JOIN fetch_observations observation ON observation.fetch_id = latest_fetches.id
-        JOIN offering_revisions revision ON revision.id = observation.revision_id
-        WHERE revision.availability = 'published' AND revision.menu_text IS NOT NULL
-       ), active_dates AS (
-        SELECT revision.service_date
-        FROM active_assessments assessment
-        JOIN offering_revisions revision ON revision.id = assessment.revision_id
-        JOIN current_revisions current ON current.revision_id = assessment.revision_id
-        GROUP BY revision.service_date
-        ORDER BY revision.service_date DESC
-        LIMIT 8
-       )
-       SELECT
-        assessment.id AS assessmentId,
-        assessment.assessed_at AS assessedAt,
-        assessment.rationale_fi AS rationale,
-        assessment.scores_json AS scoresJson,
-        assessment.total_score AS score,
-        feedback.direction AS feedbackDirection,
-        restaurant.id AS restaurantId,
-        restaurant.name AS restaurantName,
-        revision.menu_text AS menuText,
-        revision.service_date AS serviceDate
-       FROM active_assessments assessment
-       JOIN offering_revisions revision ON revision.id = assessment.revision_id
-       JOIN current_revisions current ON current.revision_id = assessment.revision_id
-       JOIN active_dates ON active_dates.service_date = revision.service_date
-       JOIN restaurants restaurant ON restaurant.id = revision.restaurant_id
-       LEFT JOIN assessment_feedback feedback ON feedback.assessment_id = assessment.id
-       ORDER BY revision.service_date DESC, assessment.total_score DESC,
-         restaurant.name COLLATE NOCASE, assessment.id DESC`,
-    )
-    .all(
-      versions.profileVersion,
-      versions.rubricVersion,
-      versions.promptVersion,
-      versions.schemaVersion,
-      versions.model,
-    ) as Array<{
-      assessedAt: string;
-      assessmentId: number;
-      feedbackDirection: "higher" | "lower" | null;
-      menuText: string | null;
-      rationale: string;
-      restaurantId: string;
-      restaurantName: string;
-      score: number;
-      scoresJson: string;
-      serviceDate: string;
-    }>;
+  const recentAssessments = getRecentAssessments(db, versions);
   const errors = db
     .prepare(
       `SELECT

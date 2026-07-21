@@ -49,7 +49,6 @@ export function createOpenAiMenuExtractor(options: OpenAiMenuExtractorOptions): 
     }) as unknown as OpenAiClientLike);
 
   return async (request) => {
-    request.budget?.consume();
     const response = await client.responses.parse({
       input: JSON.stringify({
         pageText: request.pageText,

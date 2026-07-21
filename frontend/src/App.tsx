@@ -19,7 +19,13 @@ import {
   restaurantWeekHref,
   type BrowserAdapter,
 } from "./navigation";
-import type { DayResponse, Menu, Restaurant, RestaurantWeekResponse } from "./types";
+import type {
+  DayResponse,
+  Menu,
+  Restaurant,
+  RestaurantWeekResponse,
+  StructuredMenu,
+} from "./types";
 
 type RestaurantDay = RestaurantWeekResponse["days"][number];
 
@@ -96,7 +102,7 @@ function DateNavigation({
         <span aria-hidden="true">←</span>
       </button>
       <div className="date-navigation-current">
-        <span className="date-context">{isToday ? "Tänään" : "Valittu päivä"}</span>
+        {!isToday && <span className="date-context">Valittu päivä</span>}
         <strong>{formatLongDate(date)}</strong>
       </div>
       {isToday ? (
@@ -191,10 +197,39 @@ function DietarySafetyNote() {
   );
 }
 
+function CourseList({ courses }: { courses: StructuredMenu["courses"] }) {
+  return (
+    <ul className="course-list">
+      {courses.map((course, index) => (
+        <li key={`${course.nameFi}-${index}`}>
+          <div className="course-line">
+            <span className="course-name">{course.nameFi}</span>
+            {course.dietaryMarkers.length > 0 && (
+              <span
+                className="dietary-markers"
+                aria-label={`Ravintolan ilmoittamat ruokavaliomerkinnät: ${dietaryMarkerLabel(course.dietaryMarkers)}`}
+              >
+                {[...new Set(course.dietaryMarkers)].map((marker, markerIndex) => (
+                  <span key={`${marker}-${markerIndex}`}>{marker}</span>
+                ))}
+              </span>
+            )}
+          </div>
+          {course.explicitAllergens.length > 0 && (
+            <small>Ilmoitetut allergeenit: {course.explicitAllergens.join(", ")}</small>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function MenuContent({
+  courseLimit,
   menu,
   showRawText = true,
 }: {
+  courseLimit?: number;
   menu: Pick<Menu, "structuredMenu" | "text">;
   showRawText?: boolean;
 }) {
@@ -204,30 +239,20 @@ function MenuContent({
     return <p className="menu-text">{menu.text}</p>;
   }
 
+  const visibleCourses = courseLimit ? courses.slice(0, courseLimit) : courses;
+  const remainingCourses = courseLimit ? courses.slice(courseLimit) : [];
+
   return (
     <div className="structured-menu">
-      <ul className="course-list">
-        {courses.map((course, index) => (
-          <li key={`${course.nameFi}-${index}`}>
-            <div className="course-line">
-              <span className="course-name">{course.nameFi}</span>
-              {course.dietaryMarkers.length > 0 && (
-                <span
-                  className="dietary-markers"
-                  aria-label={`Ravintolan ilmoittamat ruokavaliomerkinnät: ${dietaryMarkerLabel(course.dietaryMarkers)}`}
-                >
-                  {[...new Set(course.dietaryMarkers)].map((marker, markerIndex) => (
-                    <span key={`${marker}-${markerIndex}`}>{marker}</span>
-                  ))}
-                </span>
-              )}
-            </div>
-            {course.explicitAllergens.length > 0 && (
-              <small>Ilmoitetut allergeenit: {course.explicitAllergens.join(", ")}</small>
-            )}
-          </li>
-        ))}
-      </ul>
+      <CourseList courses={visibleCourses} />
+      {remainingCourses.length > 0 && (
+        <details className="menu-more">
+          <summary>
+            Näytä {remainingCourses.length} {remainingCourses.length === 1 ? "muu kohta" : "muuta kohtaa"}
+          </summary>
+          <CourseList courses={remainingCourses} />
+        </details>
+      )}
       {showRawText && menu.text && (
         <details className="raw-menu">
           <summary>Alkuperäinen ruokalistateksti</summary>
@@ -288,11 +313,7 @@ function RecommendationList({ data }: { data: DayResponse }) {
             {primary.menu.lunchHours && <li>{primary.menu.lunchHours}</li>}
             {primary.menu.priceText && <li>{primary.menu.priceText}</li>}
           </ul>
-          <div className="menu-preview">
-            <span className="menu-preview-label">Päivän menu</span>
-            {hasDietaryMarkers(primary.menu) && <DietarySafetyNote />}
-            <MenuContent menu={primary.menu} showRawText={false} />
-          </div>
+          <p className="recommendation-rationale">{primary.rationale}</p>
           <div className="recommendation-actions">
             <RestaurantLink
               className="recommendation-primary-link"
@@ -311,6 +332,11 @@ function RecommendationList({ data }: { data: DayResponse }) {
                 <NewTabHint />
               </a>
             )}
+          </div>
+          <div className="menu-preview">
+            <span className="menu-preview-label">Päivän menu</span>
+            {hasDietaryMarkers(primary.menu) && <DietarySafetyNote />}
+            <MenuContent courseLimit={4} menu={primary.menu} showRawText={false} />
           </div>
         </article>
 
@@ -334,7 +360,8 @@ function RecommendationList({ data }: { data: DayResponse }) {
                   <span className="recommendation-row-facts">
                     {[recommendation.menu.lunchHours, recommendation.menu.priceText].filter(Boolean).join(" · ")}
                   </span>
-                  <MenuContent menu={recommendation.menu} showRawText={false} />
+                  <p className="recommendation-rationale">{recommendation.rationale}</p>
+                  <MenuContent courseLimit={2} menu={recommendation.menu} showRawText={false} />
                 </article>
               </li>
             ))}

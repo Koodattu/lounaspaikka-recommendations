@@ -7,7 +7,7 @@ colors:
   route-green: "#334C39"
   route-green-hover: "#343A31"
   ink: "#20261D"
-  secondary-ink: "#687064"
+  secondary-ink: "#666D62"
   field-ground: "#F4EFE5"
   clear-surface: "#FFFDF8"
   input-surface: "#FFFFFF"
@@ -165,7 +165,7 @@ The palette behaves like civic wayfinding: one visible signal, one dependable ro
 ### Neutral
 
 - **Ink** (#20261D): default text and the primary high-contrast line color.
-- **Secondary Ink** (#687064): supporting copy and metadata on Clear Surface only; use Ink on Field Ground when the text is small or contrast is uncertain.
+- **Secondary Ink** (#666D62): supporting copy and metadata with AA contrast on both Clear Surface and Field Ground; use Ink when text is especially small or critical.
 - **Field Ground** (#F4EFE5): the page canvas. It creates place and continuity, not a decorative “paper” effect.
 - **Clear Surface** (#FFFDF8): grouped reading and decision surfaces.
 - **Input Surface** (#FFFFFF): editable fields and controls that must read as active.

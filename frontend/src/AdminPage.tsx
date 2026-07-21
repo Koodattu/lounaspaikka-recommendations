@@ -62,7 +62,6 @@ function LoginPanel({
   return (
     <main className="admin-main admin-login-main">
       <section className="admin-login-card">
-        <span className="eyebrow">Ylläpito</span>
         <h1>Kirjaudu ylläpitoon</h1>
         <p>Tarkista keräyksen tila ja lisää puuttuvia ruokalistasivuja.</p>
         <form className="admin-form" onSubmit={submit}>
@@ -129,20 +128,29 @@ function outcomeLabel(outcome: string | null): string {
   return outcome ? labels[outcome] ?? outcome : "Ei vielä haettu";
 }
 
+function ExternalLinkHint() {
+  return <span className="visually-hidden"> (avautuu uuteen välilehteen)</span>;
+}
+
 function AdminDashboard({
   data,
   error,
   onLogout,
   onRefresh,
+  onSessionExpired,
 }: {
   data: AdminOverview;
   error: string | null;
   onLogout: () => Promise<void>;
   onRefresh: () => Promise<void>;
+  onSessionExpired: () => void;
 }) {
   const [url, setUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [savingAssessmentId, setSavingAssessmentId] = useState<number | null>(null);
   const [sourceMessage, setSourceMessage] = useState<string | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -157,6 +165,7 @@ function AdminDashboard({
   const visibleAssessments = data.recentAssessments.filter(
     (assessment) => assessment.serviceDate === selectedAssessmentDate,
   );
+  const busy = adding || loggingOut || refreshing || savingAssessmentId !== null;
 
   useEffect(() => {
     if (!assessmentDates.includes(selectedAssessmentDate)) {
@@ -177,10 +186,14 @@ function AdminDashboard({
       });
       setUrl("");
       setSourceMessage("Lähde lisättiin ja ruokalista haettiin.");
+      await onRefresh();
     } catch (error) {
+      if (error instanceof AdminRequestError && error.status === 401) {
+        onSessionExpired();
+        return;
+      }
       setSourceError(error instanceof Error ? error.message : "Lähteen lisäys epäonnistui.");
     } finally {
-      await onRefresh();
       setAdding(false);
     }
   }
@@ -188,9 +201,11 @@ function AdminDashboard({
   async function saveAssessmentFeedback(
     assessmentId: number,
     direction: "higher" | "lower" | null,
+    restaurantName: string,
   ) {
     setSavingAssessmentId(assessmentId);
     setFeedbackError(null);
+    setFeedbackMessage(null);
     try {
       await adminRequest(`/api/admin/assessments/${assessmentId}/feedback`, {
         body: JSON.stringify({ direction }),
@@ -198,10 +213,37 @@ function AdminDashboard({
         method: "PUT",
       });
       await onRefresh();
+      setFeedbackMessage(
+        direction
+          ? `Palaute tallennettiin: ${restaurantName}.`
+          : `Palaute poistettiin: ${restaurantName}.`,
+      );
     } catch (error) {
+      if (error instanceof AdminRequestError && error.status === 401) {
+        onSessionExpired();
+        return;
+      }
       setFeedbackError(error instanceof Error ? error.message : "Palautetta ei saatu tallennettua.");
     } finally {
       setSavingAssessmentId(null);
+    }
+  }
+
+  async function refreshOverview() {
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function logout() {
+    setLoggingOut(true);
+    try {
+      await onLogout();
+    } finally {
+      setLoggingOut(false);
     }
   }
 
@@ -209,51 +251,74 @@ function AdminDashboard({
     <main className="admin-main">
       <section className="admin-hero">
         <div>
-          <span className="eyebrow">Ylläpito</span>
           <h1>Järjestelmän tila</h1>
-          <p>Keräyksen, ruokalistojen ja suositusten nopea yleiskuva.</p>
+          <p>Näe poikkeamat, tarkista arviot ja pidä ruokalähteet kunnossa.</p>
         </div>
         <div className="admin-actions">
-          <button className="button admin-secondary-button" type="button" onClick={() => void onRefresh()}>
-            Päivitä tiedot
+          <button
+            className="button admin-secondary-button"
+            disabled={busy}
+            type="button"
+            onClick={() => void refreshOverview()}
+          >
+            {refreshing ? "Päivitetään…" : "Päivitä tiedot"}
           </button>
-          <button className="button admin-secondary-button" type="button" onClick={() => void onLogout()}>
-            Kirjaudu ulos
+          <button
+            className="button admin-secondary-button"
+            disabled={busy}
+            type="button"
+            onClick={() => void logout()}
+          >
+            {loggingOut ? "Kirjaudutaan ulos…" : "Kirjaudu ulos"}
           </button>
         </div>
       </section>
 
-      <section className="admin-status-strip" aria-label="Palvelun tila">
+      <section
+        aria-busy={data.refresh.running || refreshing}
+        aria-label="Palvelun tila"
+        aria-live="polite"
+        className="admin-status-strip"
+      >
         <div>
           <span className={`status-dot ${data.refresh.running ? "status-dot-running" : "status-dot-ok"}`} />
           <strong>{data.refresh.running ? "Keräys käynnissä" : "Palvelu valmiina"}</strong>
         </div>
-        <span>OpenAI {data.openAiConfigured ? "käytössä" : "ei käytössä"}</span>
+        <span>Arviointi {data.openAiConfigured ? "käytössä" : "ei käytössä"}</span>
         <span>Päivitetty {formatUpdatedAt(data.generatedAt)}</span>
       </section>
       {error && <p className="admin-inline-error" role="alert">{error}</p>}
+      {data.refresh.lastError && (
+        <p className="admin-inline-error admin-priority-error" role="alert">
+          <strong>Viimeisin keräys epäonnistui.</strong>{" "}
+          Tarkista keräysvirheet alempaa ja päivitä tiedot korjauksen jälkeen.
+        </p>
+      )}
 
-      <section className="admin-count-grid" aria-label="Tietokannan luvut">
-        {countLabels.map(([key, label]) => (
-          <article className="admin-count-card" key={key}>
-            <strong>{data.counts[key].toLocaleString("fi-FI")}</strong>
-            <span>{label}</span>
-          </article>
-        ))}
-      </section>
+      <details className="admin-metrics">
+        <summary>Yhteenvetoluvut</summary>
+        <section className="admin-count-grid" aria-label="Tietokannan luvut">
+          {countLabels.map(([key, label]) => (
+            <article className="admin-count-card" key={key}>
+              <strong>{data.counts[key].toLocaleString("fi-FI")}</strong>
+              <span>{label}</span>
+            </article>
+          ))}
+        </section>
+      </details>
 
       <section className="admin-panel admin-wide-panel" aria-labelledby="calibration-title">
         <div className="admin-section-heading admin-calibration-heading">
-          <div>
-            <span className="eyebrow">Suositukset</span>
-            <h2 id="calibration-title">Arvioiden kalibrointi</h2>
-          </div>
+          <h2 id="calibration-title">Arvioiden kalibrointi</h2>
           <div className="admin-calibration-toolbar">
             <label htmlFor="assessment-date">Lounaspäivä</label>
             <select
               disabled={assessmentDates.length === 0}
               id="assessment-date"
-              onChange={(event) => setSelectedAssessmentDate(event.target.value)}
+              onChange={(event) => {
+                setSelectedAssessmentDate(event.target.value);
+                setFeedbackMessage(null);
+              }}
               value={selectedAssessmentDate}
             >
               {assessmentDates.map((serviceDate) => (
@@ -270,9 +335,20 @@ function AdminDashboard({
         <p className="admin-calibration-intro">
           Valitse päivä ja merkitse, ovatko kokonaispisteet mielestäsi liian korkeat vai
           liian matalat. Palaute tallentuu arviointiohjeen seuraavaa kalibrointia varten
-          eikä muuta julkaistua top 3:a heti.
+          eikä muuta julkaistua top 3:a heti. Poista valinta painamalla samaa palautetta
+          uudelleen.
         </p>
+        <details className="admin-score-help">
+          <summary>Mitä osa-alueet tarkoittavat?</summary>
+          <dl>
+            <div><dt>Houkuttelevuus</dt><dd>Kuinka kiinnostavalta päivän ruoka vaikuttaa.</dd></div>
+            <div><dt>Erityisyys</dt><dd>Kuinka selvästi menu erottuu tavallisesta lounaasta.</dd></div>
+            <div><dt>Vaihtelu</dt><dd>Kuinka monta aidosti erilaista ateriaa on tarjolla.</dd></div>
+            <div><dt>Hinta–laatu</dt><dd>Mitä ilmoitetulla hinnalla saa.</dd></div>
+          </dl>
+        </details>
         {feedbackError && <p className="admin-inline-error" role="alert">{feedbackError}</p>}
+        {feedbackMessage && <p className="form-message form-message-ok" role="status">{feedbackMessage}</p>}
         {visibleAssessments.length === 0 ? (
           <p className="admin-empty">Aktiivisen arviointiversion arvioita ei ole vielä.</p>
         ) : (
@@ -316,10 +392,11 @@ function AdminDashboard({
                         aria-pressed={assessment.feedbackDirection === "lower"}
                         className="admin-feedback-button"
                         data-direction="lower"
-                        disabled={savingAssessmentId !== null}
+                        disabled={busy}
                         onClick={() => void saveAssessmentFeedback(
                           assessment.assessmentId,
                           assessment.feedbackDirection === "lower" ? null : "lower",
+                          assessment.restaurantName,
                         )}
                         type="button"
                       >
@@ -329,10 +406,11 @@ function AdminDashboard({
                         aria-pressed={assessment.feedbackDirection === "higher"}
                         className="admin-feedback-button"
                         data-direction="higher"
-                        disabled={savingAssessmentId !== null}
+                        disabled={busy}
                         onClick={() => void saveAssessmentFeedback(
                           assessment.assessmentId,
                           assessment.feedbackDirection === "higher" ? null : "higher",
+                          assessment.restaurantName,
                         )}
                         type="button"
                       >
@@ -349,29 +427,39 @@ function AdminDashboard({
 
       <div className="admin-layout">
         <section className="admin-panel" aria-labelledby="source-add-title">
-          <span className="eyebrow">Uusi lähde</span>
           <h2 id="source-add-title">Lisää ruokalistasivu</h2>
           <p>Anna julkinen HTTPS-sivu, jonka tekstissä ruokalista näkyy ilman kirjautumista. PDF- ja selainohjelmaa vaativia sivuja ei lueta.</p>
           <form className="admin-form" onSubmit={addSource}>
             <label htmlFor="menu-source-url">Ravintolan ruokalistasivu</label>
             <input
+              aria-describedby="menu-source-hint"
+              autoCapitalize="none"
+              autoCorrect="off"
+              disabled={busy}
               id="menu-source-url"
+              inputMode="url"
+              maxLength={2048}
               onChange={(event) => setUrl(event.target.value)}
+              pattern="https://.*"
               placeholder="https://ravintola.fi/lounas/"
               required
+              spellCheck={false}
+              title="Anna täydellinen HTTPS-osoite."
               type="url"
               value={url}
             />
+            <small className="field-hint" id="menu-source-hint">
+              Osoitteen pitää alkaa https:// ja olla enintään 2048 merkkiä.
+            </small>
             {sourceMessage && <p className="form-message form-message-ok" role="status">{sourceMessage}</p>}
             {sourceError && <p className="form-message form-message-error" role="alert">{sourceError}</p>}
-            <button className="button button-accent" disabled={adding} type="submit">
+            <button className="button button-dark" disabled={busy} type="submit">
               {adding ? "Haetaan ja luetaan…" : "Lisää ja hae ruokalista"}
             </button>
           </form>
         </section>
 
         <section className="admin-panel" aria-labelledby="crawler-title">
-          <span className="eyebrow">Keräys</span>
           <h2 id="crawler-title">Viimeisin ajo</h2>
           <dl className="admin-detail-list">
             <div><dt>Tila</dt><dd>{data.refresh.running ? "Käynnissä" : "Valmis"}</dd></div>
@@ -382,17 +470,17 @@ function AdminDashboard({
             <div><dt>Käynnissäoloaika</dt><dd>{Math.floor(data.uptimeSeconds / 60).toLocaleString("fi-FI")} min</dd></div>
           </dl>
           {data.refresh.lastError && (
-            <p className="admin-inline-error">{data.refresh.lastError.message}</p>
+            <details className="admin-error-details">
+              <summary>Virheen tekniset tiedot</summary>
+              <p>{data.refresh.lastError.message}</p>
+            </details>
           )}
         </section>
       </div>
 
       <section className="admin-panel admin-wide-panel" aria-labelledby="sources-title">
         <div className="admin-section-heading">
-          <div>
-            <span className="eyebrow">Sivulähteet</span>
-            <h2 id="sources-title">Lisätyt ravintolat</h2>
-          </div>
+          <h2 id="sources-title">Lisätyt ravintolat</h2>
           <span>{data.sources.length} lähdettä</span>
         </div>
         {data.sources.length === 0 ? (
@@ -403,7 +491,11 @@ function AdminDashboard({
               <li key={source.id}>
                 <div>
                   <strong>{source.restaurantName ?? "Nimeä ei vielä löytynyt"}</strong>
-                  <a href={source.url} rel="noreferrer" target="_blank">{source.url}</a>
+                  <a href={source.url} rel="noreferrer" target="_blank">
+                    <span>{source.url}</span>
+                    <span aria-hidden="true">↗</span>
+                    <ExternalLinkHint />
+                  </a>
                 </div>
                 <div className="admin-source-state">
                   <span>{outcomeLabel(source.lastOutcome)}</span>
@@ -417,10 +509,7 @@ function AdminDashboard({
 
       <section className="admin-panel admin-wide-panel" aria-labelledby="errors-title">
         <div className="admin-section-heading">
-          <div>
-            <span className="eyebrow">Virheet</span>
-            <h2 id="errors-title">Viimeisimmät keräysvirheet</h2>
-          </div>
+          <h2 id="errors-title">Viimeisimmät keräysvirheet</h2>
           <span>Enintään 20</span>
         </div>
         {data.errors.length === 0 ? (
@@ -431,10 +520,17 @@ function AdminDashboard({
               <li key={error.id}>
                 <div>
                   <strong>{outcomeLabel(error.outcome)}</strong>
-                  <span>
-                    {error.message ?? "Virheen lisätietoa ei ole saatavilla."}
-                    {error.sourceUrl ? ` · ${error.sourceUrl}` : " · Lounaspaikka"}
-                  </span>
+                  <span>Tarkista lähdesivu ja päivitä tiedot, kun sivu on jälleen luettavissa.</span>
+                  <details className="admin-error-details admin-error-row-details">
+                    <summary>Tekniset tiedot</summary>
+                    <p>{error.message ?? "Virheen lisätietoa ei ole saatavilla."}</p>
+                    {error.sourceUrl && (
+                      <a href={error.sourceUrl} rel="noreferrer" target="_blank">
+                        Avaa lähdesivu <span aria-hidden="true">↗</span>
+                        <ExternalLinkHint />
+                      </a>
+                    )}
+                  </details>
                 </div>
                 <div>
                   <span>{error.affectedDateCount > 1 ? `${error.affectedDateCount} päivää` : error.serviceDate}</span>
@@ -454,7 +550,7 @@ export function AdminPage() {
   const [data, setData] = useState<AdminOverview | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function loadOverview(signal?: AbortSignal) {
+  async function loadOverview(signal?: AbortSignal, unauthorizedMessage?: string) {
     try {
       const overview = await adminRequest<AdminOverview>("/api/admin/overview", signal ? { signal } : undefined);
       setData(overview);
@@ -463,6 +559,11 @@ export function AdminPage() {
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       if (error instanceof AdminRequestError && error.status === 401) {
+        setMessage(
+          unauthorizedMessage
+            ?? (data ? "Istunto vanheni. Kirjaudu uudelleen jatkaaksesi." : null),
+        );
+        setData(null);
         setMode("login");
         return;
       }
@@ -490,7 +591,7 @@ export function AdminPage() {
         method: "POST",
       });
       setMessage(null);
-      await loadOverview();
+      await loadOverview(undefined, "Kirjautuminen ei valmistunut. Yritä uudelleen.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Kirjautuminen epäonnistui.");
     }
@@ -505,6 +606,12 @@ export function AdminPage() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Uloskirjautuminen epäonnistui.");
     }
+  }
+
+  function sessionExpired() {
+    setData(null);
+    setMessage("Istunto vanheni. Kirjaudu uudelleen jatkaaksesi.");
+    setMode("login");
   }
 
   return (
@@ -528,7 +635,13 @@ export function AdminPage() {
         </main>
       )}
       {mode === "ready" && data && (
-        <AdminDashboard data={data} error={message} onLogout={logout} onRefresh={loadOverview} />
+        <AdminDashboard
+          data={data}
+          error={message}
+          onLogout={logout}
+          onRefresh={loadOverview}
+          onSessionExpired={sessionExpired}
+        />
       )}
     </>
   );

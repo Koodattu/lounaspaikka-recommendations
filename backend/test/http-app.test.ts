@@ -96,6 +96,7 @@ describe("reader API", () => {
       rationale: "Kasviscurry tarjoaa päivän kiinnostavimman annoksen.",
       restaurant: { id: "a", name: "A-ravintola" },
       score: 10,
+      scores: { appeal: 10, distinctiveness: 10, value: 10, variety: 10 },
     });
     expect(dayBody.menus).toHaveLength(4);
     expect(dayBody.menus[1].menu.text).toBe("Paahdettua kuhaa\n13,50 €");

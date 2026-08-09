@@ -7,6 +7,13 @@ import { getDailyOfferingSnapshot } from "./daily-offering-snapshot.js";
 import type { OpenAiRequestBudget } from "./openai-request-budget.js";
 
 const scoreSchema = z.number().min(0).max(10);
+export const assessmentScoresSchema = z.object({
+  appeal: scoreSchema,
+  distinctiveness: scoreSchema,
+  value: scoreSchema,
+  variety: scoreSchema,
+});
+export type AssessmentScores = z.infer<typeof assessmentScoresSchema>;
 export const structuredMenuSchema = z.object({
   courses: z.array(
     z.object({
@@ -32,12 +39,7 @@ export type StructuredMenu = z.infer<typeof structuredMenuSchema>;
 
 export const assessmentSchema = z.object({
   rationaleFi: z.string().trim().min(5).max(180),
-  scores: z.object({
-    appeal: scoreSchema,
-    distinctiveness: scoreSchema,
-    value: scoreSchema,
-    variety: scoreSchema,
-  }),
+  scores: assessmentScoresSchema,
   structuredMenu: structuredMenuSchema,
 });
 
@@ -96,10 +98,10 @@ export interface RecommendationResult {
 }
 
 export const defaultRecommendationVersions: RecommendationVersions = {
-  model: "gpt-5.4-nano",
+  model: "gpt-5.6-luna",
   profileVersion: "shared-v1",
   promptVersion: "v5",
-  rankingVersion: "weighted-v1",
+  rankingVersion: "rankable-weighted-v2",
   rubricVersion: "v2",
   schemaVersion: "v4",
 };
@@ -118,6 +120,7 @@ interface AssessedRow {
   rationale_fi: string;
   restaurant_id: string;
   revision_id: number;
+  structured_menu_json: string | null;
   total_score: number;
 }
 
@@ -179,6 +182,7 @@ function findAssessments(
         assessment.id AS assessment_id,
         revision.restaurant_id,
         assessment.revision_id,
+        assessment.structured_menu_json,
         assessment.total_score,
         assessment.rationale_fi
       FROM assessments assessment
@@ -215,6 +219,16 @@ function loadRecommendations(db: Database.Database, setId: number): RankedRecomm
       ORDER BY entry.rank`,
     )
     .all(setId) as RankedRecommendation[];
+}
+
+function hasRankableLunch(row: AssessedRow): boolean {
+  if (!row.structured_menu_json) return false;
+  try {
+    const parsed = structuredMenuSchema.safeParse(JSON.parse(row.structured_menu_json));
+    return parsed.success && parsed.data.courses.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 export async function assessAndRankDay(
@@ -267,7 +281,7 @@ export async function assessAndRankDay(
   }
 
   const assessed = unseen.length > 0 ? findAssessments(options.db, offerings, versions) : existing;
-  const ranked = assessed.sort(compareRank).slice(0, 3);
+  const ranked = assessed.filter(hasRankableLunch).sort(compareRank).slice(0, 3);
   const inputHash = recommendationInputHash(assessed);
   const createdAt = now().toISOString();
   const { set, setInsertion } = options.db.transaction(() => {

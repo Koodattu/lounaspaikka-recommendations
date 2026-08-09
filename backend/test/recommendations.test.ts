@@ -137,7 +137,14 @@ describe("daily recommendations", () => {
             assessment: {
               rationaleFi: "Kiinnostava päivän lounas.",
               scores: { appeal: 8, distinctiveness: 8, value: 8, variety: 8 },
-              structuredMenu: { courses: [] },
+              structuredMenu: {
+                courses: [{
+                  category: "main",
+                  dietaryMarkers: [],
+                  explicitAllergens: [],
+                  nameFi: "Kasviscurry",
+                }],
+              },
             },
           }),
         },
@@ -150,6 +157,50 @@ describe("daily recommendations", () => {
       count: number;
     };
     expect(count.count).toBe(0);
+  });
+
+  it("does not rank a published notice without an actual lunch course", async () => {
+    const items = [
+      sourceItem("closed", "Suljettu", "Ei lounasta tänään"),
+      sourceItem("lunch", "Lounasravintola", "Kasviscurry"),
+    ];
+    db = openDatabase(":memory:");
+    await createRestaurantCatchment({
+      db,
+      lounaspaikka: catchmentAdapterForOfferings(items),
+    }).refresh("2026-07-14");
+
+    const result = await assessAndRankDay({
+      assessor: {
+        assess: async (facts) => ({
+          assessment: {
+            rationaleFi: "Päivän julkaistu lounastarjonta arvioitiin.",
+            scores: {
+              appeal: facts.menuText.startsWith("Ei lounasta") ? 10 : 6,
+              distinctiveness: 6,
+              value: 6,
+              variety: 6,
+            },
+            structuredMenu: {
+              courses: facts.menuText.startsWith("Ei lounasta")
+                ? []
+                : [{
+                    category: "main" as const,
+                    dietaryMarkers: [],
+                    explicitAllergens: [],
+                    nameFi: facts.menuText,
+                  }],
+            },
+          },
+        }),
+      },
+      db,
+      serviceDate: "2026-07-14",
+    });
+
+    expect(result.recommendations).toEqual([
+      expect.objectContaining({ rank: 1, restaurantId: "lunch", score: 6 }),
+    ]);
   });
 
   it("owns the request budget before crossing the assessment seam", async () => {

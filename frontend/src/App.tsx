@@ -19,6 +19,7 @@ import {
   restaurantWeekHref,
   type BrowserAdapter,
 } from "./navigation";
+import { assessmentScoreLabels, formatScore } from "./scores";
 import type {
   DayResponse,
   Menu,
@@ -28,6 +29,7 @@ import type {
 } from "./types";
 
 type RestaurantDay = RestaurantWeekResponse["days"][number];
+type DayRecommendation = DayResponse["recommendations"][number];
 
 const AdminPage = lazy(() => import("./AdminPage").then((module) => ({ default: module.AdminPage })));
 
@@ -225,11 +227,9 @@ function CourseList({ courses }: { courses: StructuredMenu["courses"] }) {
 }
 
 function MenuContent({
-  courseLimit,
   menu,
   showRawText = true,
 }: {
-  courseLimit?: number;
   menu: Pick<Menu, "structuredMenu" | "text">;
   showRawText?: boolean;
 }) {
@@ -239,20 +239,9 @@ function MenuContent({
     return <p className="menu-text">{menu.text}</p>;
   }
 
-  const visibleCourses = courseLimit ? courses.slice(0, courseLimit) : courses;
-  const remainingCourses = courseLimit ? courses.slice(courseLimit) : [];
-
   return (
     <div className="structured-menu">
-      <CourseList courses={visibleCourses} />
-      {remainingCourses.length > 0 && (
-        <details className="menu-more">
-          <summary>
-            Näytä {remainingCourses.length} {remainingCourses.length === 1 ? "muu kohta" : "muuta kohtaa"}
-          </summary>
-          <CourseList courses={remainingCourses} />
-        </details>
-      )}
+      <CourseList courses={courses} />
       {showRawText && menu.text && (
         <details className="raw-menu">
           <summary>Alkuperäinen ruokalistateksti</summary>
@@ -281,165 +270,156 @@ function MenuDataNotice() {
   );
 }
 
-function RecommendationList({ data }: { data: DayResponse }) {
-  const primary = data.recommendations.find((recommendation) => recommendation.rank === 1)
-    ?? data.recommendations[0];
-  const companions = data.recommendations
-    .filter((recommendation) => recommendation !== primary)
-    .sort((first, second) => first.rank - second.rank);
-
-  if (data.status === "pending" && !primary) {
-    return <div className="inline-state" role="status">Suosituksia arvioidaan vielä.</div>;
-  }
-  if (data.status === "unavailable" && !primary) {
-    return null;
-  }
-  if (!primary) return null;
-
-  const recommendationSource = primary.menu.source ?? data.source;
-  const recommendationUpdatedAt = data.menus.find(
-    (entry) => entry.restaurant.id === primary.restaurant.id,
-  )?.fetchedAt ?? data.lastSuccessfulFetchAt;
+function RecommendationAssessment({
+  recommendation,
+}: {
+  recommendation: DayRecommendation;
+}) {
+  const headingId = `menu-assessment-${recommendation.restaurant.id}`;
 
   return (
-    <section className="recommendation-section" aria-labelledby="recommendations-title">
-      <h2 className="visually-hidden" id="recommendations-title">Päivän suositukset</h2>
-      <div className="recommendation-layout">
-        <article className="recommendation-card rank-1">
-          <span className="rank-label">Päivän ykkösvalinta</span>
-          <h2>{primary.restaurant.name}</h2>
-          <ul className="decision-facts" aria-label="Valinnan käytännön tiedot">
-            {primary.restaurant.address && <li>{primary.restaurant.address}</li>}
-            {primary.menu.lunchHours && <li>{primary.menu.lunchHours}</li>}
-            {primary.menu.priceText && <li>{primary.menu.priceText}</li>}
-          </ul>
-          <p className="recommendation-rationale">{primary.rationale}</p>
-          <div className="recommendation-actions">
-            <RestaurantLink
-              className="recommendation-primary-link"
-              restaurant={primary.restaurant}
-              date={data.serviceDate}
-            />
-            {primary.restaurant.address && (
-              <a
-                className="text-link recommendation-route-link"
-                href={mapHref(primary.restaurant.address)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <span>Avaa reitti</span>
-                <span aria-hidden="true">↗</span>
-                <NewTabHint />
-              </a>
-            )}
+    <aside className="menu-assessment" aria-labelledby={headingId}>
+      <header className="assessment-heading">
+        <span id={headingId}>Arvion perustelu</span>
+      </header>
+      <p className="assessment-rationale">
+        <span>{recommendation.rationale}</span>
+      </p>
+      <dl className="assessment-breakdown" aria-label="Menuarvion osa-alueet">
+        {assessmentScoreLabels.map(([key, label]) => (
+          <div key={key}>
+            <dt>{label}</dt>
+            <dd>{formatScore(recommendation.scores[key])}</dd>
           </div>
-          <div className="menu-preview">
-            <span className="menu-preview-label">Päivän menu</span>
-            {hasDietaryMarkers(primary.menu) && <DietarySafetyNote />}
-            <MenuContent courseLimit={4} menu={primary.menu} showRawText={false} />
-          </div>
-        </article>
-
-        {companions.length > 0 && (
-          <ol className="recommendation-companions" start={2} role="list">
-            {companions.map((recommendation) => (
-              <li key={recommendation.restaurant.id} value={recommendation.rank}>
-                <article className="recommendation-row">
-                  <span className="visually-hidden">Sija {recommendation.rank}. </span>
-                  <span className="rank-number" aria-hidden="true">{recommendation.rank}</span>
-                  <span className="recommendation-row-main">
-                    <a
-                      className="recommendation-name-link"
-                      href={restaurantHref(recommendation.restaurant.id, data.serviceDate)}
-                    >
-                      <strong>{recommendation.restaurant.name}</strong>
-                      <span aria-hidden="true">→</span>
-                    </a>
-                    {recommendation.restaurant.address && <small>{recommendation.restaurant.address}</small>}
-                  </span>
-                  <span className="recommendation-row-facts">
-                    {[recommendation.menu.lunchHours, recommendation.menu.priceText].filter(Boolean).join(" · ")}
-                  </span>
-                  <p className="recommendation-rationale">{recommendation.rationale}</p>
-                  <MenuContent courseLimit={2} menu={recommendation.menu} showRawText={false} />
-                </article>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-
-      <div className="recommendation-trust" aria-label="Suositusten perusteet ja päivitys">
-        <span>Arvio: kiinnostavuus, vaihtelu ja hinta</span>
-        {recommendationUpdatedAt && <span>Päivitetty {formatUpdatedAt(recommendationUpdatedAt)}</span>}
-        <span>
-          Ykkösvalinnan lähde:{" "}
-          <a href={recommendationSource.url} target="_blank" rel="noreferrer">
-            {recommendationSource.name}
-            <NewTabHint />
-          </a>
-        </span>
-      </div>
-    </section>
+        ))}
+      </dl>
+    </aside>
   );
 }
 
-function OtherMenus({ data }: { data: DayResponse }) {
-  const recommendedRestaurantIds = new Set(
-    data.recommendations.map((recommendation) => recommendation.restaurant.id),
+function DailyMenuList({ data }: { data: DayResponse }) {
+  const recommendationByRestaurant = new Map(
+    data.recommendations.map((recommendation) => [recommendation.restaurant.id, recommendation]),
   );
-  const otherMenus = data.menus.filter(
-    (entry) => !recommendedRestaurantIds.has(entry.restaurant.id),
-  );
-
-  if (otherMenus.length === 0) return null;
+  const entries = data.menus
+    .map((entry) => ({
+      entry,
+      recommendation: recommendationByRestaurant.get(entry.restaurant.id),
+    }))
+    .sort((first, second) => {
+      if (first.recommendation && second.recommendation) {
+        return first.recommendation.rank - second.recommendation.rank;
+      }
+      if (first.recommendation) return -1;
+      if (second.recommendation) return 1;
+      return first.entry.restaurant.name.localeCompare(second.entry.restaurant.name, "fi-FI");
+    });
 
   return (
-    <section className="section all-menus" aria-labelledby="all-menus-title">
-      <header className="section-heading compact-heading">
-        <h2 id="all-menus-title">Muut päivän lounaat</h2>
-        <span className="result-count">
-          {otherMenus.length} {otherMenus.length === 1 ? "ravintola" : "ravintolaa"}
-        </span>
+    <section className="daily-menus" aria-labelledby="daily-menus-title">
+      <header className="daily-menus-heading">
+        <h2 className="visually-hidden" id="daily-menus-title">Kaikki ruokalistat</h2>
+        <p>
+          {entries.length} {entries.length === 1 ? "ravintola" : "ravintolaa"}
+          {data.recommendations.length > 0 && ` · ${data.recommendations.length} suositusta`}
+        </p>
+        {data.recommendations.length > 0 && (
+          <details className="assessment-method">
+            <summary>Arvioinnin perusteet</summary>
+            <p>
+              Kokonaisarvio painottaa houkuttelevuutta 35 %, omaleimaisuutta 25 %,
+              vaihtelua 20 % ja hinta–laatua 20 %. Ravintolan nimi ei vaikuta arvioon.
+            </p>
+          </details>
+        )}
       </header>
-      <ul className="menu-list">
-        {otherMenus.map((entry) => (
-          <li key={entry.restaurant.id}>
-            <article className="menu-row">
-              <header className="menu-row-heading">
-                <div className="menu-row-restaurant">
-                  <h3>
-                    <a href={restaurantHref(entry.restaurant.id, data.serviceDate)}>
-                      {entry.restaurant.name}
-                    </a>
-                  </h3>
-                  {entry.restaurant.address && <small>{entry.restaurant.address}</small>}
-                </div>
-                <div className="menu-row-meta">
+
+      {data.status === "pending" && data.recommendations.length === 0 && (
+        <div className="inline-state assessment-pending" role="status">
+          Menuarvioita muodostetaan. Ruokalistat ovat jo selattavissa.
+        </div>
+      )}
+
+      <ul className="daily-menu-list">
+        {entries.map(({ entry, recommendation }) => {
+          const source = entry.menu.source ?? data.source;
+          return (
+            <li key={entry.restaurant.id}>
+              <article
+                className={`daily-menu-row${recommendation ? ` is-recommended rank-${recommendation.rank}` : ""}`}
+              >
+                <header className="daily-menu-restaurant">
+                  <div className="daily-menu-title-line">
+                    {recommendation && (
+                      <span className="rank-marker" aria-label={`Sija ${recommendation.rank}`}>
+                        {recommendation.rank}
+                      </span>
+                    )}
+                    <h3>
+                      <a href={restaurantHref(entry.restaurant.id, data.serviceDate)}>
+                        {entry.restaurant.name}
+                      </a>
+                    </h3>
+                    {recommendation && (
+                      <strong
+                        className="row-assessment-score"
+                        aria-label={`Arvio ${formatScore(recommendation.score)} / 10`}
+                      >
+                        {formatScore(recommendation.score)} <small>/ 10</small>
+                      </strong>
+                    )}
+                  </div>
+                  {entry.restaurant.address && (
+                    <p className="restaurant-address">{entry.restaurant.address}</p>
+                  )}
                   {(entry.menu.lunchHours || entry.menu.priceText) && (
-                    <span className="menu-row-facts">
+                    <p className="daily-menu-facts">
                       {[entry.menu.lunchHours, entry.menu.priceText].filter(Boolean).join(" · ")}
-                    </span>
+                    </p>
                   )}
-                  {entry.menu.source && entry.menu.source.url !== data.source.url && (
-                    <a
-                      className="menu-row-source"
-                      href={entry.menu.source.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {entry.menu.source.name}
-                      <NewTabHint />
-                    </a>
-                  )}
+                  <div className="daily-menu-actions">
+                    <RestaurantLink
+                      className="menu-week-link"
+                      label="Viikon ruokalista"
+                      restaurant={entry.restaurant}
+                      date={data.serviceDate}
+                    />
+                    {entry.restaurant.address && (
+                      <a
+                        className="text-link menu-route-link"
+                        href={mapHref(entry.restaurant.address)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <span>Reitti</span>
+                        <span aria-hidden="true">↗</span>
+                        <NewTabHint />
+                      </a>
+                    )}
+                  </div>
+                  <p className="menu-provenance">
+                    <span>Päivitetty {formatUpdatedAt(entry.fetchedAt)}</span>
+                    {source.url !== data.source.url && (
+                      <a href={source.url} target="_blank" rel="noreferrer">
+                        {source.name}
+                        <NewTabHint />
+                      </a>
+                    )}
+                  </p>
+                </header>
+
+                <div className="daily-menu-content">
+                  <span className="menu-column-label">Ruokalista</span>
+                  <MenuContent menu={entry.menu} />
                 </div>
-              </header>
-              <div className="menu-row-body">
-                <MenuContent menu={entry.menu} showRawText={false} />
-              </div>
-            </article>
-          </li>
-        ))}
+
+                {recommendation && (
+                  <RecommendationAssessment recommendation={recommendation} />
+                )}
+              </article>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -519,13 +499,12 @@ function DayPage({ browser }: { browser: BrowserAdapter }) {
             )}
             {!(data.stale && data.lastSuccessfulFetchAt === null) && (
               <>
-                <RecommendationList data={data} />
+                {data.menus.length > 0 && <DailyMenuList data={data} />}
                 {data.status === "unavailable" && data.menus.length === 0 && (
                   <div className="inline-state empty-day-state">
                     Valitse toinen päivä yllä olevilla nuolilla.
                   </div>
                 )}
-                {data.menus.length > 0 && <OtherMenus data={data} />}
                 {data.menus.some((entry) => entry.menu.structuredMenu?.courses.length) && (
                   <MenuDataNotice />
                 )}

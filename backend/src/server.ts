@@ -47,7 +47,7 @@ function reportPublication(
 
 async function start(): Promise<void> {
   const databasePath = resolve(process.env.DATABASE_PATH ?? "data/lunch.sqlite");
-  const model = process.env.OPENAI_MODEL ?? "gpt-5.4-nano";
+  const model = process.env.OPENAI_MODEL ?? "gpt-5.6-luna";
   const adminOpenAiRequestBudget = parseOpenAiRequestBudget(
     "OPENAI_ADMIN_SOURCE_REQUEST_BUDGET",
     process.env.OPENAI_ADMIN_SOURCE_REQUEST_BUDGET,

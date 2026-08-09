@@ -35,9 +35,33 @@ const menu = {
         explicitAllergens: [],
         nameFi: "Sitruunaperunoita",
       },
+      {
+        category: "main",
+        dietaryMarkers: ["L"],
+        explicitAllergens: [],
+        nameFi: "Paahdettua halloumia ja kasviksia",
+      },
+      {
+        category: "soup",
+        dietaryMarkers: ["G"],
+        explicitAllergens: [],
+        nameFi: "Porkkana-inkiväärikeittoa",
+      },
+      {
+        category: "salad",
+        dietaryMarkers: [],
+        explicitAllergens: [],
+        nameFi: "Vihersalaattia",
+      },
+      {
+        category: "dessert",
+        dietaryMarkers: ["L"],
+        explicitAllergens: [],
+        nameFi: "Marjarahkaa",
+      },
     ],
   },
-  text: "Paahdettua kuhaa (G)\nAllergeenit: kala\nSitruunaperunoita",
+  text: "Paahdettua kuhaa (G)\nAllergeenit: kala\nSitruunaperunoita\nPaahdettua halloumia ja kasviksia (L)\nPorkkana-inkiväärikeittoa (G)\nVihersalaattia\nMarjarahkaa (L)",
   title: "Lounas 14.7.",
 };
 
@@ -70,6 +94,7 @@ const dayResponse = {
       rationale: "Kuha ja raikas lisuke tekevät tästä päivän kiinnostavimman lounaan.",
       restaurant,
       score: 9.2,
+      scores: { appeal: 9.5, distinctiveness: 9, value: 8.4, variety: 9.1 },
     },
     {
       menu: { ...menu, structuredMenu: null, text: "Kasviscurry" },
@@ -77,13 +102,20 @@ const dayResponse = {
       rationale: "Monipuolinen kasvislounas erottuu edukseen.",
       restaurant: { ...restaurant, id: "kasvis", name: "Kasvisravintola" },
       score: 8.4,
+      scores: { appeal: 8.5, distinctiveness: 8.2, value: 8.4, variety: 8.6 },
     },
     {
-      menu: { ...menu, structuredMenu: null, text: "Lohikeitto" },
+      menu: {
+        ...menu,
+        source: { name: "Muun ravintolan lista", url: "https://example.com/muu/menu" },
+        structuredMenu: null,
+        text: "Lihapullat ja perunamuusi",
+      },
       rank: 3,
       rationale: "Hyvä hinta ja huolella kuvattu klassikko.",
-      restaurant: { ...restaurant, id: "keitto", name: "Keittola" },
+      restaurant: { ...restaurant, id: "muu", name: "Muu lounaspaikka" },
       score: 7.8,
+      scores: { appeal: 8, distinctiveness: 7.4, value: 8.2, variety: 7.2 },
     },
   ],
   serviceDate: "2026-07-14",
@@ -122,7 +154,7 @@ describe("reader app", () => {
     expect(browser.location()).toEqual({ pathname: "/", search: "?date=2026-07-15" });
   });
 
-  it("shows the top three once, then the remaining menus, and moves to the next date", async () => {
+  it("shows every daily menu once with complete dishes and transparent assessments", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {
@@ -140,48 +172,49 @@ describe("reader app", () => {
       await screen.findByText("Tiistai 14. heinäkuuta ladattu. 3 ravintolaa ja 3 suositusta."),
     ).toBeTruthy();
     expect(screen.getAllByText("Vinola")).toHaveLength(1);
-    expect(screen.getAllByText("13,70 €").length).toBeGreaterThan(0);
-    expect(screen.queryByText("9,2")).toBeNull();
-    const otherMenusHeading = screen.getByRole("heading", { name: "Muut päivän lounaat" });
-    const otherMenus = otherMenusHeading.closest("section");
-    expect(otherMenus).not.toBeNull();
-    expect(within(otherMenus!).getByText("Muu lounaspaikka")).toBeTruthy();
-    expect(within(otherMenus!).getByText("Lihapullat ja perunamuusi")).toBeTruthy();
-    expect(within(otherMenus!).queryByText("Vinola")).toBeNull();
-    expect(within(otherMenus!).queryByText("Kasvisravintola")).toBeNull();
+    expect(screen.getAllByText(/13,70 €/).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Arvio 9,2 / 10")).toBeTruthy();
+    expect(screen.getByLabelText("Sija 3")).toBeTruthy();
+    const allMenusHeading = screen.getByRole("heading", { name: "Kaikki ruokalistat" });
+    const allMenus = allMenusHeading.closest("section");
+    expect(allMenus).not.toBeNull();
+    expect(within(allMenus!).getByText("Muu lounaspaikka")).toBeTruthy();
+    expect(within(allMenus!).getByText("Lihapullat ja perunamuusi")).toBeTruthy();
+    expect(within(allMenus!).getByText("Vinola")).toBeTruthy();
+    expect(within(allMenus!).getByText("Kasvisravintola")).toBeTruthy();
     expect(
-      within(otherMenus!).getByRole("link", {
+      within(allMenus!).getByRole("link", {
         name: /Muun ravintolan lista.*avautuu uuteen välilehteen/,
       }),
     ).toBeTruthy();
     expect(screen.getByText("Kuha ja raikas lisuke tekevät tästä päivän kiinnostavimman lounaan.")).toBeTruthy();
     expect(screen.getAllByText("Paahdettua kuhaa").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Sitruunaperunoita").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Paahdettua halloumia ja kasviksia").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Porkkana-inkiväärikeittoa").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Vihersalaattia").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Marjarahkaa").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Ilmoitetut allergeenit: kala").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Alkuperäinen ruokalistateksti")).toBeNull();
+    expect(screen.getAllByText("Alkuperäinen ruokalistateksti").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Näytä \d+ muuta kohtaa/)).toBeNull();
     expect(screen.getAllByText("Kasviscurry").length).toBeGreaterThan(0);
-    const companion = document.querySelector("a.recommendation-name-link[href^='/ravintolat/kasvis']")
-      ?.closest("article");
+    const companion = screen.getByRole("heading", { name: "Kasvisravintola", level: 3 })
+      .closest("article");
     expect(companion).not.toBeNull();
     expect(within(companion!).getByText("Kasviscurry")).toBeTruthy();
     expect(within(companion!).getByText("Monipuolinen kasvislounas erottuu edukseen.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Avaa reitti.*avautuu uuteen välilehteen/ })).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: /Reitti.*avautuu uuteen välilehteen/ }).length)
+      .toBeGreaterThan(0);
     const dataNotice = screen.getByText(/Ruokavaliomerkinnät on poimittu automaattisesti/);
-    const primaryRestaurant = screen.getByRole("heading", { name: "Vinola", level: 2 });
+    const primaryRestaurant = screen.getByRole("heading", { name: "Vinola", level: 3 });
     const primaryCard = primaryRestaurant.closest("article");
     expect(primaryCard).not.toBeNull();
-    const inlineSafetyNote = within(primaryCard!).getByText(
-      /Varmista ruokavaliomerkinnät ravintolasta/,
-    );
-    const primaryDietaryMarkers = within(primaryCard!).getByLabelText(
+    const primaryDietaryMarkers = within(primaryCard!).getAllByLabelText(
       /Ravintolan ilmoittamat ruokavaliomerkinnät/,
     );
-    expect(
-      inlineSafetyNote.compareDocumentPosition(primaryDietaryMarkers)
-      & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(primaryDietaryMarkers.length).toBeGreaterThan(0);
     expect(primaryRestaurant.compareDocumentPosition(dataNotice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(otherMenusHeading.compareDocumentPosition(dataNotice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(allMenusHeading.compareDocumentPosition(dataNotice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByText(/allergeeniton/i)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Seuraava päivä" }));
@@ -225,7 +258,9 @@ describe("reader app", () => {
 
     const { unmount } = render(<App />);
     expect(await screen.findByRole("heading", { name: "Päivän lounaat" })).toBeTruthy();
-    expect(await screen.findByText("Suosituksia arvioidaan vielä.")).toBeTruthy();
+    expect(
+      await screen.findByText("Menuarvioita muodostetaan. Ruokalistat ovat jo selattavissa."),
+    ).toBeTruthy();
     expect(screen.getByText("Ruokalistojen päivitys viivästyi.")).toBeTruthy();
     expect(screen.getByText("Näytämme viimeksi onnistuneesti haetut tiedot.")).toBeTruthy();
 
@@ -465,7 +500,7 @@ describe("reader app", () => {
 
     render(<App />);
 
-    const primaryHeading = await screen.findByRole("heading", { name: "Vinola", level: 2 });
+    const primaryHeading = await screen.findByRole("heading", { name: "Vinola", level: 3 });
     const primaryCard = primaryHeading.closest("article");
     expect(primaryCard).not.toBeNull();
     const primary = within(primaryCard!);
@@ -474,14 +509,13 @@ describe("reader app", () => {
     expect(primaryCard!.textContent).toContain("Kolmas ruoka");
     expect(primary.queryByText("Koko lista avautuu viikon ruokalistasta.")).toBeNull();
 
-    const trust = screen.getByLabelText("Suositusten perusteet ja päivitys");
     expect(
-      within(trust).getByRole("link", {
+      primary.getByRole("link", {
         name: /Vinolan oma lista.*avautuu uuteen välilehteen/,
       }).getAttribute("href"),
     )
       .toBe(customSource.url);
-    expect(trust.textContent).toContain("15.7.");
+    expect(primaryCard!.textContent).toContain("15.7.");
     expect(screen.queryByRole("heading", { name: "Muut päivän lounaat" })).toBeNull();
   });
 

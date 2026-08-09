@@ -39,7 +39,7 @@ If this is not an identifiable restaurant lunch-menu page, set pageType to "unsu
 Write all extracted user-facing text in Finnish. Keep menu text compact and factual. Preserve restaurant names, addresses, phone numbers, dish names, prices, and times faithfully.`;
 
 export function createOpenAiMenuExtractor(options: OpenAiMenuExtractorOptions): MenuExtractor {
-  const model = options.model ?? "gpt-5.4-nano";
+  const model = options.model ?? "gpt-5.6-luna";
   const client =
     options.client ??
     (new OpenAI({

@@ -107,6 +107,12 @@ export interface DayResponse {
     rationale: string;
     restaurant: Restaurant;
     score: number;
+    scores: {
+      appeal: number;
+      distinctiveness: number;
+      value: number;
+      variety: number;
+    };
   }>;
   serviceDate: string;
   source: SourceAttribution;

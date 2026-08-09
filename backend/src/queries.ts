@@ -6,9 +6,11 @@ import {
 } from "./daily-offering-snapshot.js";
 import { addDays } from "./dates.js";
 import {
+  assessmentScoresSchema,
   defaultRecommendationVersions,
   recommendationInputHash,
   structuredMenuSchema,
+  type AssessmentScores,
   type RecommendationVersions,
   type StructuredMenu,
 } from "./recommendations.js";
@@ -45,6 +47,12 @@ function parseStructuredMenu(value: string | null): StructuredMenu | null {
   } catch {
     return null;
   }
+}
+
+function parseAssessmentScores(value: string): AssessmentScores {
+  const parsed = assessmentScoresSchema.safeParse(JSON.parse(value));
+  if (!parsed.success) throw new Error("Stored assessment scores are invalid");
+  return parsed.data;
 }
 
 function sourceFor(entry: DailyOfferingSnapshotEntry): DayMenu["menu"]["source"] {
@@ -200,6 +208,7 @@ export interface DailyRecommendation {
   rationale: string;
   restaurant: DayMenu["restaurant"];
   score: number;
+  scores: AssessmentScores;
 }
 
 export function getDailyRecommendations(
@@ -255,6 +264,7 @@ export function getDailyRecommendations(
       `SELECT
         entry.rank,
         assessment.total_score AS score,
+        assessment.scores_json AS scoresJson,
         assessment.rationale_fi AS rationale,
         assessment.revision_id AS revisionId,
         assessment.structured_menu_json AS structuredMenuJson
@@ -268,6 +278,7 @@ export function getDailyRecommendations(
       rationale: string;
       revisionId: number;
       score: number;
+      scoresJson: string;
       structuredMenuJson: string | null;
     }>;
   const entriesByRevision = new Map(
@@ -285,6 +296,7 @@ export function getDailyRecommendations(
         rationale: row.rationale,
         restaurant: restaurantFor(entry),
         score: row.score,
+        scores: parseAssessmentScores(row.scoresJson),
       };
     }),
   };

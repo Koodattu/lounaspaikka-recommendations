@@ -52,7 +52,7 @@ Normalize the published food into structuredMenu.courses:
 - Return an empty courses array when the text does not offer an actual lunch.`;
 
 export function createOpenAiAssessor(options: OpenAiAssessorOptions): AssessmentAdapter {
-  const model = options.model ?? "gpt-5.4-nano";
+  const model = options.model ?? "gpt-5.6-luna";
   const client =
     options.client ??
     (new OpenAI({

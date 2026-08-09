@@ -11,7 +11,7 @@
   --danger-surface: #fff0ed;
   --ink: #20261d;
   --line: rgba(32, 38, 29, 0.14);
-  --muted: #666d62;
+  --muted: #5b6358;
   --olive: #334c39;
   --paper: #fffdf8;
   --shadow: 0 1px 2px rgba(32, 38, 29, 0.06), 0 12px 32px rgba(52, 48, 37, 0.08);
@@ -302,8 +302,8 @@ h3 {
   white-space: nowrap;
 }
 
-.rank-1 .rank-badge,
-.rank-1 .hours {
+.recommendation-card.rank-1 .rank-badge,
+.recommendation-card.rank-1 .hours {
   color: #fffaf1;
   border-color: rgba(255, 250, 241, 0.22);
   background: rgba(255, 250, 241, 0.1);
@@ -325,7 +325,7 @@ h3 {
   letter-spacing: 0;
 }
 
-.rank-1 .score small {
+.recommendation-card.rank-1 .score small {
   color: rgba(255, 250, 241, 0.7);
 }
 
@@ -343,7 +343,7 @@ h3 {
   border-color: var(--line);
 }
 
-.rank-1 .menu-preview {
+.recommendation-card.rank-1 .menu-preview {
   border-color: rgba(255, 250, 241, 0.2);
 }
 
@@ -437,11 +437,11 @@ h3 {
   line-height: 1.5;
 }
 
-.rank-1 .course-list li {
+.recommendation-card.rank-1 .course-list li {
   border-color: rgba(255, 250, 241, 0.2);
 }
 
-.rank-1 .course-list small {
+.recommendation-card.rank-1 .course-list small {
   color: rgba(255, 250, 241, 0.7);
 }
 
@@ -2862,5 +2862,420 @@ body {
 
   .restaurant-hero {
     padding: 16px 0 10px;
+  }
+}
+
+/* Menu-first daily browser */
+
+.reader-header,
+.reader-main {
+  width: min(100% - 24px, 1320px);
+}
+
+.reader-header {
+  min-height: 56px;
+}
+
+.reader-main {
+  padding-bottom: 18px;
+}
+
+.day-wayfinding {
+  gap: 8px;
+  padding: 8px 0 10px;
+}
+
+.date-navigation {
+  min-height: 52px;
+  padding: 4px;
+}
+
+.date-navigation button {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+}
+
+:is(.date-navigation, .week-toolbar) :is(.today-button, .today-current) {
+  min-height: 42px;
+}
+
+.daily-menus {
+  border-top: 1px solid var(--quiet-divider);
+}
+
+.daily-menus-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 6px 0;
+}
+
+.daily-menus-heading > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.assessment-method {
+  max-width: 60ch;
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.assessment-method summary {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 720;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.assessment-method p {
+  max-width: 60ch;
+  margin: 2px 0 0;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.assessment-pending {
+  min-height: 52px !important;
+  margin: 0 0 8px;
+  padding: 10px 12px !important;
+  font-size: 0.82rem;
+}
+
+.daily-menu-list {
+  padding: 0;
+  margin: 0;
+  border-block: 1px solid var(--quiet-divider);
+  list-style: none;
+}
+
+.daily-menu-list > li + li {
+  border-top: 1px solid var(--quiet-divider);
+}
+
+.daily-menu-row {
+  display: grid;
+  gap: 12px;
+  padding: 14px 4px;
+}
+
+.daily-menu-row.rank-1 {
+  background: rgba(51, 76, 57, 0.055);
+}
+
+.daily-menu-restaurant,
+.daily-menu-content,
+.menu-assessment {
+  min-width: 0;
+}
+
+.daily-menu-title-line {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+}
+
+.daily-menu-title-line h3 {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  color: var(--ink);
+  font-family: Aptos, "Segoe UI", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 760;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.daily-menu-title-line h3 a {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.rank-marker {
+  display: inline-grid;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--light-on-dark);
+  background: var(--route-green);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 760;
+}
+
+.daily-menu-row.rank-2 .rank-marker,
+.daily-menu-row.rank-3 .rank-marker {
+  color: var(--route-green);
+  border: 1px solid rgba(51, 76, 57, 0.45);
+  background: var(--clear-surface);
+}
+
+.row-assessment-score {
+  flex: 0 0 auto;
+  color: var(--route-green);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.row-assessment-score small {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.restaurant-address,
+.daily-menu-facts,
+.menu-provenance {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.77rem;
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
+.daily-menu-facts,
+.menu-provenance {
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-menu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+  margin-top: 5px;
+}
+
+.daily-menu-actions .text-link {
+  min-height: 40px;
+  font-size: 0.78rem;
+}
+
+.menu-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  margin-top: 2px;
+}
+
+.menu-provenance a {
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.menu-column-label {
+  display: block;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 720;
+  line-height: 1.2;
+}
+
+.daily-menu-content > .structured-menu,
+.daily-menu-content > .menu-text {
+  margin: 0;
+}
+
+.daily-menu-content .course-list li {
+  padding: 5px 0;
+}
+
+.daily-menu-content .course-list li:last-child {
+  border-bottom: 0;
+}
+
+.daily-menu-content .course-line,
+.daily-menu-content > .menu-text {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.daily-menu-content .raw-menu {
+  padding-top: 3px;
+  margin-top: 7px;
+  border-top: 1px solid var(--quiet-divider);
+}
+
+.daily-menu-content .raw-menu summary {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  font-size: 0.75rem;
+}
+
+.menu-assessment {
+  align-self: start;
+  padding: 11px 12px;
+  border-radius: 12px;
+  color: var(--ink);
+  background: rgba(51, 76, 57, 0.075);
+}
+
+.assessment-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.assessment-rationale {
+  display: grid;
+  gap: 3px;
+  margin: 7px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.42;
+  text-wrap: pretty;
+}
+
+.assessment-breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  margin: 10px 0 0;
+}
+
+.assessment-breakdown > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(51, 76, 57, 0.2);
+}
+
+.assessment-breakdown dt,
+.assessment-breakdown dd {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+
+.assessment-breakdown dt {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assessment-breakdown dd {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 760;
+}
+
+.reader-main :is(.date-navigation, .week-toolbar) button:active,
+.reader-main :is(.button, .text-link):active {
+  transform: scale(0.96);
+}
+
+.menu-data-notice {
+  margin: 12px 0;
+}
+
+.source-footer {
+  padding-top: 14px;
+}
+
+@media (max-width: 599px) {
+  .daily-menus-heading {
+    gap: 8px;
+  }
+
+  .assessment-method {
+    width: auto;
+  }
+
+  .daily-menu-row {
+    padding: 12px 0;
+  }
+
+  .daily-menu-row.rank-1 {
+    padding-inline: 8px;
+    margin-inline: -8px;
+  }
+
+  .daily-menu-title-line {
+    align-items: flex-start;
+  }
+
+  .daily-menu-title-line h3 {
+    padding-top: 4px;
+  }
+
+  .row-assessment-score {
+    padding-top: 6px;
+  }
+}
+
+@media (min-width: 760px) {
+  .reader-header,
+  .reader-main {
+    width: min(100% - 32px, 1320px);
+  }
+
+  .daily-menu-row {
+    grid-template-columns: minmax(190px, 0.62fr) minmax(0, 1.38fr);
+    grid-template-areas:
+      "restaurant menu"
+      "restaurant assessment";
+    gap: 12px 24px;
+    padding: 16px 4px;
+  }
+
+  .daily-menu-restaurant {
+    grid-area: restaurant;
+  }
+
+  .daily-menu-content {
+    grid-area: menu;
+  }
+
+  .menu-assessment {
+    grid-area: assessment;
+  }
+}
+
+@media (min-width: 1080px) {
+  .day-wayfinding {
+    grid-template-columns: minmax(390px, 0.72fr) minmax(0, 1fr);
+    padding: 10px 0 12px;
+  }
+
+  .daily-menu-row {
+    grid-template-columns: minmax(205px, 0.65fr) minmax(360px, 1.55fr) minmax(245px, 0.8fr);
+    grid-template-areas: "restaurant menu assessment";
+    gap: 24px;
+    padding: 17px 4px;
+  }
+
+  .daily-menu-row:not(.is-recommended) .daily-menu-content {
+    grid-column: 2 / -1;
+  }
+
+  .daily-menu-content .course-line,
+  .daily-menu-content > .menu-text {
+    font-size: 0.92rem;
   }
 }

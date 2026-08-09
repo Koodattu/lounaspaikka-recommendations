@@ -221,7 +221,7 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
       );
       const hasPublishedMenu = menus.some((entry) => entry.menu.status === "published");
       const status =
-        recommendationData.recommendations.length > 0
+        recommendationData.recommendations.length > 0 || recommendationData.generatedAt !== null
           ? "ready"
           : hasPublishedMenu
             ? "pending"

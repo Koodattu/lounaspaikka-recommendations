@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 
 import { formatShortDate, formatUpdatedAt, todayInHelsinki } from "./dates";
+import { assessmentScoreLabels, formatScore } from "./scores";
 import type { AdminOverview } from "./types";
 
 class AdminRequestError extends Error {
@@ -92,23 +93,6 @@ const countLabels: Array<[keyof AdminOverview["counts"], string]> = [
   ["assessments", "Arvioita"],
   ["recommendationSets", "Suosituspäiviä"],
 ];
-
-const assessmentScoreLabels: Array<[
-  keyof AdminOverview["recentAssessments"][number]["scores"],
-  string,
-]> = [
-  ["appeal", "Houkuttelevuus"],
-  ["distinctiveness", "Erityisyys"],
-  ["variety", "Vaihtelu"],
-  ["value", "Hinta–laatu"],
-];
-
-function formatScore(value: number): string {
-  return value.toLocaleString("fi-FI", {
-    maximumFractionDigits: 1,
-    minimumFractionDigits: 1,
-  });
-}
 
 function timeOrDash(value: string | null): string {
   return value ? formatUpdatedAt(value) : "–";
@@ -342,7 +326,7 @@ function AdminDashboard({
           <summary>Mitä osa-alueet tarkoittavat?</summary>
           <dl>
             <div><dt>Houkuttelevuus</dt><dd>Kuinka kiinnostavalta päivän ruoka vaikuttaa.</dd></div>
-            <div><dt>Erityisyys</dt><dd>Kuinka selvästi menu erottuu tavallisesta lounaasta.</dd></div>
+            <div><dt>Omaleimaisuus</dt><dd>Kuinka selvästi menu erottuu tavallisesta lounaasta.</dd></div>
             <div><dt>Vaihtelu</dt><dd>Kuinka monta aidosti erilaista ateriaa on tarjolla.</dd></div>
             <div><dt>Hinta–laatu</dt><dd>Mitä ilmoitetulla hinnalla saa.</dd></div>
           </dl>

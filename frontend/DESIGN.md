@@ -7,7 +7,7 @@ colors:
   route-green: "#334C39"
   route-green-hover: "#343A31"
   ink: "#20261D"
-  secondary-ink: "#666D62"
+  secondary-ink: "#5B6358"
   field-ground: "#F4EFE5"
   clear-surface: "#FFFDF8"
   input-surface: "#FFFFFF"
@@ -136,7 +136,7 @@ components:
 
 Keskipäivän opaste treats the interface like a well-designed local wayfinding system at noon: crisp, direct, grounded, and high-signal. It preserves the established clay, green, and neutral identity, but every visual decision must help a Finnish-speaking reader choose lunch in under a minute.
 
-The reader surface is mobile-first and composed for fast scanning: the current date, the leading recommendation, its rationale, and the path to the full offering must be obvious without study. Desktop adds breadth, not a different hierarchy. The admin surface uses the same palette and components at a denser rhythm, with the editorial serif removed from operational labels, controls, and data.
+The reader surface is mobile-first and composed for fast scanning: the current date and every restaurant's complete menu must be obvious without study. Ranking, score, and rationale annotate that shared menu list instead of replacing it with a separate recommendation surface. Desktop adds breadth, not a different hierarchy. The admin surface uses the same palette and components at a denser rhythm, with the editorial serif removed from operational labels, controls, and data.
 
 This system explicitly rejects the food-delivery marketplace, the generic SaaS dashboard, and the “AI-powered” novelty product. Recommendations earn trust through visible criteria, sources, freshness, and honest states; the underlying AI stays backstage.
 
@@ -165,7 +165,7 @@ The palette behaves like civic wayfinding: one visible signal, one dependable ro
 ### Neutral
 
 - **Ink** (#20261D): default text and the primary high-contrast line color.
-- **Secondary Ink** (#666D62): supporting copy and metadata with AA contrast on both Clear Surface and Field Ground; use Ink when text is especially small or critical.
+- **Secondary Ink** (#5B6358): supporting copy and metadata with comfortable AA contrast on both Clear Surface and Field Ground; use Ink when text is especially small or critical.
 - **Field Ground** (#F4EFE5): the page canvas. It creates place and continuity, not a decorative “paper” effect.
 - **Clear Surface** (#FFFDF8): grouped reading and decision surfaces.
 - **Input Surface** (#FFFFFF): editable fields and controls that must read as active.
@@ -225,7 +225,7 @@ Components feel aligned, compact, and touchable. They reuse a small vocabulary a
 
 - **Shape:** precise controls with a 12px radius and a 46px minimum height.
 - **Primary:** Route Green with Light on Dark text, 11px × 16px padding, and strong sentence-case labeling.
-- **Hover / Focus:** Deep Route Green on hover; a 3px Signal Clay focus outline with a 3px offset. Active state scales only to 0.98 and never shifts layout.
+- **Hover / Focus:** Deep Route Green on hover; a 3px Signal Clay focus outline with a 3px offset. Active state scales only to 0.96 and never shifts layout.
 - **Secondary:** Clear Surface with Ink text and a full Quiet Divider border. Signal Clay is not a default button fill.
 
 ### Chips
@@ -254,9 +254,9 @@ Components feel aligned, compact, and touchable. They reuse a small vocabulary a
 
 ### Recommendation Wayfinder
 
-The first recommendation is the single solid Route Green anchor. Rank, restaurant, rationale, and two or three decision facts form one scan path. A route action may follow the menu action as a quieter real-world handoff. The second and third recommendations are quieter aligned companions rather than three equally promoted marketplace cards; each still shows one dish and a short rationale so it can work as a genuine fallback. The full menu offering becomes a calm row or reading list when that structure scans faster than a card grid.
+The daily view is one calm restaurant list ordered with the top three first. Every row shows the restaurant facts and complete published menu using the same structure. Recommended rows add a compact rank, total score, visible rationale, and four component scores; they never truncate the food to manufacture a highlight. A route action and the weekly restaurant view remain quieter handoffs.
 
-**The One Decision Rule.** The current date and leading recommendation must be identifiable in the first mobile viewport without relying on animation.
+**The One Decision Rule.** The current date, leading recommendation, its score, and the beginning of its complete menu must be identifiable in the first mobile viewport without relying on animation.
 
 ### Safety and Status
 

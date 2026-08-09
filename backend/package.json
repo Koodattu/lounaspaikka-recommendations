@@ -5,19 +5,20 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
+    "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "better-sqlite3": "^12.11.1",
-    "fastify": "^5.10.0",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.11.3",
     "node-cron": "^4.6.0",
-    "openai": "^6.46.0",
+    "openai": "^7.4.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
+    "@types/better-sqlite3": "^9.6.0"
   }
 }

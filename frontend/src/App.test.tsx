@@ -167,7 +167,9 @@ describe("reader app", () => {
     expect(document.querySelector("main")?.getAttribute("aria-busy")).toBe("true");
     expect(await screen.findByRole("heading", { name: "Päivän lounaat" })).toBeTruthy();
     expect(document.querySelector("main")?.getAttribute("aria-busy")).toBe("false");
-    expect(document.title).toBe("Tiistai 14. heinäkuuta | Mihin lounaalle?");
+    await waitFor(() =>
+      expect(document.title).toBe("Tiistai 14. heinäkuuta | Mihin lounaalle?"),
+    );
     expect(
       await screen.findByText("Tiistai 14. heinäkuuta ladattu. 3 ravintolaa ja 3 suositusta."),
     ).toBeTruthy();
@@ -222,7 +224,9 @@ describe("reader app", () => {
     expect(
       await screen.findByText("Keskiviikko 15. heinäkuuta ladattu. 3 ravintolaa ja 3 suositusta."),
     ).toBeTruthy();
-    expect(document.title).toBe("Keskiviikko 15. heinäkuuta | Mihin lounaalle?");
+    await waitFor(() =>
+      expect(document.title).toBe("Keskiviikko 15. heinäkuuta | Mihin lounaalle?"),
+    );
 
     window.history.replaceState({}, "", "/?date=2026-07-14");
     window.dispatchEvent(new PopStateEvent("popstate"));
@@ -240,7 +244,9 @@ describe("reader app", () => {
     expect(screen.queryByRole("button", { name: "Tänään valittu" })).toBeNull();
     expect(document.querySelector(".date-navigation .today-current")?.getAttribute("aria-current"))
       .toBe("date");
-    expect(document.title).toBe(`${formatLongDate(todayInHelsinki())} | Mihin lounaalle?`);
+    await waitFor(() =>
+      expect(document.title).toBe(`${formatLongDate(todayInHelsinki())} | Mihin lounaalle?`),
+    );
   });
 
   it("shows honest pending, stale, and network error states", async () => {
@@ -333,7 +339,9 @@ describe("reader app", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Vinola" })).toBeTruthy();
-    expect(document.title).toBe("Vinola – Tiistai 14. heinäkuuta | Mihin lounaalle?");
+    await waitFor(() =>
+      expect(document.title).toBe("Vinola – Tiistai 14. heinäkuuta | Mihin lounaalle?"),
+    );
     expect(await screen.findByText("Vinola: Tiistai 14. heinäkuuta ladattu.")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Viikon ruokalista" })).toBeTruthy();
     const selectedDayHeading = screen.getByRole("heading", { name: "Tiistai 14. heinäkuuta" });
@@ -370,7 +378,9 @@ describe("reader app", () => {
       ),
     );
     expect(await screen.findByText("Vinola: Tiistai 21. heinäkuuta ladattu.")).toBeTruthy();
-    expect(document.title).toBe("Vinola – Tiistai 21. heinäkuuta | Mihin lounaalle?");
+    await waitFor(() =>
+      expect(document.title).toBe("Vinola – Tiistai 21. heinäkuuta | Mihin lounaalle?"),
+    );
     window.history.replaceState({}, "", "/ravintolat/vinola?week=2026-07-13&date=2026-07-14");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await waitFor(() =>
@@ -465,7 +475,9 @@ describe("reader app", () => {
 
     expect(await screen.findByRole("heading", { name: "Keskiviikko 15. heinäkuuta" }))
       .toBeTruthy();
-    expect(document.title).toBe("Vinola – Keskiviikko 15. heinäkuuta | Mihin lounaalle?");
+    await waitFor(() =>
+      expect(document.title).toBe("Vinola – Keskiviikko 15. heinäkuuta | Mihin lounaalle?"),
+    );
     expect(
       screen.getByRole("link", { name: "Keskiviikko 15. heinäkuuta · suosituksiin" })
         .getAttribute("href"),

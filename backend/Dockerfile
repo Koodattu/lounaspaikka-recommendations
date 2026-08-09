@@ -1,23 +1,31 @@
-FROM node:24-bookworm AS build
+# syntax=docker/dockerfile:1
+
+FROM node:24.17.0-bookworm-slim AS base
 
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
-RUN npm ci
 
-COPY backend backend
-RUN npm run build -w backend
+FROM base AS dependencies
 
-FROM node:24-bookworm AS production-dependencies
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci --workspace @lounaspaikka/backend --include-workspace-root \
+    --ignore-scripts --no-audit --no-fund
 
-WORKDIR /app
-COPY package.json package-lock.json ./
-COPY backend/package.json backend/package.json
-COPY frontend/package.json frontend/package.json
-RUN npm ci --omit=dev
+FROM dependencies AS build
 
-FROM node:24-bookworm-slim AS runtime
+COPY backend/tsconfig.json backend/tsconfig.build.json backend/
+COPY backend/src backend/src
+RUN npm run build --workspace @lounaspaikka/backend
+
+FROM base AS production-dependencies
+
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm ci --workspace @lounaspaikka/backend --omit=dev \
+    --ignore-scripts --no-audit --no-fund
+
+FROM node:24.17.0-alpine3.24 AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app
@@ -26,8 +34,6 @@ COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY backend/package.json ./backend/package.json
 COPY --from=build /app/backend/dist ./backend/dist
 
-RUN rm -rf /usr/local/lib/node_modules/npm \
-    && rm -f /usr/local/bin/npm /usr/local/bin/npx
 RUN mkdir /data && chown node:node /data
 USER node
 

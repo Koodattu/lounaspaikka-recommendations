@@ -3,7 +3,6 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: lounaspaikka-backend
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
@@ -35,7 +34,7 @@ services:
     restart: unless-stopped
 
   caddy:
-    image: caddy:2.11-alpine
+    image: caddy:2.11.4-alpine
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-http://localhost}

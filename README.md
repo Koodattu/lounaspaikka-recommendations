@@ -38,7 +38,7 @@ SQLite data is stored in the `lunch_data` volume. Back up that volume before hos
 
 ## Local development
 
-Requirements: Node.js 24 and npm 11.
+Requirements: Node.js 24.15 or newer in the 24.x release line and npm 11.
 
 ```sh
 npm install

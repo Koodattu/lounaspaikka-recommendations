@@ -69,6 +69,7 @@ class AdminRouteErrorBoundary extends Component<
 function AppHeader() {
   return (
     <header className="app-header reader-header">
+      <a className="skip-link" href="#main-content">Siirry sisältöön</a>
       <a className="brand" href="/" aria-label="Mihin lounaalle? – etusivu">
         <span className="brand-mark" aria-hidden="true">M</span>
         <span className="brand-copy">
@@ -209,10 +210,11 @@ function CourseList({ courses }: { courses: StructuredMenu["courses"] }) {
             {course.dietaryMarkers.length > 0 && (
               <span
                 className="dietary-markers"
+                role="group"
                 aria-label={`Ravintolan ilmoittamat ruokavaliomerkinnät: ${dietaryMarkerLabel(course.dietaryMarkers)}`}
               >
                 {[...new Set(course.dietaryMarkers)].map((marker, markerIndex) => (
-                  <span key={`${marker}-${markerIndex}`}>{marker}</span>
+                  <span aria-hidden="true" key={`${marker}-${markerIndex}`}>{marker}</span>
                 ))}
               </span>
             )}
@@ -321,7 +323,7 @@ function DailyMenuList({ data }: { data: DayResponse }) {
         <h2 className="visually-hidden" id="daily-menus-title">Kaikki ruokalistat</h2>
         <p>
           {entries.length} {entries.length === 1 ? "ravintola" : "ravintolaa"}
-          {data.recommendations.length > 0 && ` · ${data.recommendations.length} suositusta`}
+          {data.recommendations.length > 0 && ` · ${data.recommendations.length} ${data.recommendations.length === 1 ? "suositus" : "suositusta"}`}
         </p>
         {data.recommendations.length > 0 && (
           <details className="assessment-method">
@@ -351,8 +353,8 @@ function DailyMenuList({ data }: { data: DayResponse }) {
                 <header className="daily-menu-restaurant">
                   <div className="daily-menu-title-line">
                     {recommendation && (
-                      <span className="rank-marker" aria-label={`Sija ${recommendation.rank}`}>
-                        {recommendation.rank}
+                      <span className="rank-marker" role="img" aria-label={`Sija ${recommendation.rank}`}>
+                        <span aria-hidden="true">{recommendation.rank}</span>
                       </span>
                     )}
                     <h3>
@@ -472,7 +474,7 @@ function DayPage({ browser }: { browser: BrowserAdapter }) {
   return (
     <>
       <AppHeader />
-      <main className="reader-main" aria-busy={!error && data === null}>
+      <main className="reader-main" id="main-content" tabIndex={-1} aria-busy={!error && data === null}>
         <p className="visually-hidden" role="status" aria-atomic="true">
           {loadedDayAnnouncement}
         </p>
@@ -500,9 +502,11 @@ function DayPage({ browser }: { browser: BrowserAdapter }) {
             {!(data.stale && data.lastSuccessfulFetchAt === null) && (
               <>
                 {data.menus.length > 0 && <DailyMenuList data={data} />}
-                {data.status === "unavailable" && data.menus.length === 0 && (
+                {data.menus.length === 0 && (
                   <div className="inline-state empty-day-state">
-                    Valitse toinen päivä yllä olevilla nuolilla.
+                    {data.status === "pending"
+                      ? "Ruokalistoja odotetaan vielä. Voit selata muita päiviä yllä olevilla nuolilla."
+                      : "Valitse toinen päivä yllä olevilla nuolilla."}
                   </div>
                 )}
                 {data.menus.some((entry) => entry.menu.structuredMenu?.courses.length) && (
@@ -652,7 +656,7 @@ function RestaurantPage({
   return (
     <>
       <AppHeader />
-      <main className="reader-main restaurant-page" aria-busy={loading}>
+      <main className="reader-main restaurant-page" id="main-content" tabIndex={-1} aria-busy={loading}>
         <p className="visually-hidden" role="status" aria-atomic="true">
           {loadedWeekAnnouncement}
         </p>

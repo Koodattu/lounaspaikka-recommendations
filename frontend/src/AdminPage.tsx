@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { formatShortDate, formatUpdatedAt, todayInHelsinki } from "./dates";
 import { assessmentScoreLabels, formatScore } from "./scores";
@@ -14,7 +14,13 @@ class AdminRequestError extends Error {
 }
 
 async function adminRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error("Yhteyttä ei saatu muodostettua. Tarkista yhteys ja yritä uudelleen.");
+  }
   const payload = (await response.json().catch(() => null)) as
     | { error?: { message?: string } }
     | null;
@@ -30,6 +36,7 @@ async function adminRequest<T>(url: string, init?: RequestInit): Promise<T> {
 function AdminHeader() {
   return (
     <header className="app-header admin-header">
+      <a className="skip-link" href="#main-content">Siirry sisältöön</a>
       <a className="brand" href="/" aria-label="Mihin lounaalle? – etusivu">
         <span className="brand-mark" aria-hidden="true">M</span>
         <span>Mihin lounaalle?</span>
@@ -48,34 +55,41 @@ function LoginPanel({
 }) {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const passwordInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    passwordInput.current?.focus();
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     try {
       await onLogin(password);
-      setPassword("");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <main className="admin-main admin-login-main">
+    <main className="admin-main admin-login-main" id="main-content" tabIndex={-1}>
       <section className="admin-login-card">
         <h1>Kirjaudu ylläpitoon</h1>
         <p>Tarkista keräyksen tila ja lisää puuttuvia ruokalistasivuja.</p>
         <form className="admin-form" onSubmit={submit}>
           <label htmlFor="admin-password">Salasana</label>
           <input
+            aria-describedby={error ? "login-error" : undefined}
             autoComplete="current-password"
+            disabled={submitting}
             id="admin-password"
+            ref={passwordInput}
             onChange={(event) => setPassword(event.target.value)}
             required
             type="password"
             value={password}
           />
-          {error && <p className="form-message form-message-error" role="alert">{error}</p>}
+          {error && <p className="form-message form-message-error" id="login-error" role="alert">{error}</p>}
           <button className="button button-dark" disabled={submitting} type="submit">
             {submitting ? "Kirjaudutaan…" : "Kirjaudu"}
           </button>
@@ -109,7 +123,7 @@ function outcomeLabel(outcome: string | null): string {
     success: "Onnistui",
     unchanged: "Ei muutoksia",
   };
-  return outcome ? labels[outcome] ?? outcome : "Ei vielä haettu";
+  return outcome ? labels[outcome] ?? "Tuntematon tila" : "Ei vielä haettu";
 }
 
 function ExternalLinkHint() {
@@ -232,7 +246,7 @@ function AdminDashboard({
   }
 
   return (
-    <main className="admin-main">
+    <main className="admin-main" id="main-content" tabIndex={-1}>
       <section className="admin-hero">
         <div>
           <h1>Järjestelmän tila</h1>
@@ -265,8 +279,8 @@ function AdminDashboard({
         className="admin-status-strip"
       >
         <div>
-          <span className={`status-dot ${data.refresh.running ? "status-dot-running" : "status-dot-ok"}`} />
-          <strong>{data.refresh.running ? "Keräys käynnissä" : "Palvelu valmiina"}</strong>
+          <span aria-hidden="true" className={`status-dot ${data.refresh.running ? "status-dot-running" : data.refresh.lastError ? "status-dot-error" : "status-dot-ok"}`} />
+          <strong>{data.refresh.running ? "Keräys käynnissä" : data.refresh.lastError ? "Keräys vaatii huomiota" : "Palvelu valmiina"}</strong>
         </div>
         <span>Arviointi {data.openAiConfigured ? "käytössä" : "ei käytössä"}</span>
         <span>Päivitetty {formatUpdatedAt(data.generatedAt)}</span>
@@ -297,14 +311,16 @@ function AdminDashboard({
           <div className="admin-calibration-toolbar">
             <label htmlFor="assessment-date">Lounaspäivä</label>
             <select
-              disabled={assessmentDates.length === 0}
+              disabled={assessmentDates.length === 0 || savingAssessmentId !== null}
               id="assessment-date"
               onChange={(event) => {
                 setSelectedAssessmentDate(event.target.value);
                 setFeedbackMessage(null);
+                setFeedbackError(null);
               }}
               value={selectedAssessmentDate}
             >
+              {assessmentDates.length === 0 && <option value="">Ei arvioita</option>}
               {assessmentDates.map((serviceDate) => (
                 <option key={serviceDate} value={serviceDate}>{formatShortDate(serviceDate)}</option>
               ))}
@@ -384,6 +400,7 @@ function AdminDashboard({
                         )}
                         type="button"
                       >
+                        {assessment.feedbackDirection === "lower" && <span aria-hidden="true">✓ </span>}
                         Liian korkea
                       </button>
                       <button
@@ -398,6 +415,7 @@ function AdminDashboard({
                         )}
                         type="button"
                       >
+                        {assessment.feedbackDirection === "higher" && <span aria-hidden="true">✓ </span>}
                         Liian matala
                       </button>
                     </div>
@@ -412,11 +430,11 @@ function AdminDashboard({
       <div className="admin-layout">
         <section className="admin-panel" aria-labelledby="source-add-title">
           <h2 id="source-add-title">Lisää ruokalistasivu</h2>
-          <p>Anna julkinen HTTPS-sivu, jonka tekstissä ruokalista näkyy ilman kirjautumista. PDF- ja selainohjelmaa vaativia sivuja ei lueta.</p>
+          <p>Anna ravintolan julkinen ruokalistasivu. Ruokalistan pitää näkyä sivun tekstissä ilman kirjautumista. PDF-tiedostoja tai vasta sivun avaamisen jälkeen latautuvia ruokalistoja ei voida lukea.</p>
           <form className="admin-form" onSubmit={addSource}>
             <label htmlFor="menu-source-url">Ravintolan ruokalistasivu</label>
             <input
-              aria-describedby="menu-source-hint"
+              aria-describedby={sourceError ? "menu-source-hint menu-source-error" : "menu-source-hint"}
               autoCapitalize="none"
               autoCorrect="off"
               disabled={busy}
@@ -436,7 +454,7 @@ function AdminDashboard({
               Osoitteen pitää alkaa https:// ja olla enintään 2048 merkkiä.
             </small>
             {sourceMessage && <p className="form-message form-message-ok" role="status">{sourceMessage}</p>}
-            {sourceError && <p className="form-message form-message-error" role="alert">{sourceError}</p>}
+            {sourceError && <p className="form-message form-message-error" id="menu-source-error" role="alert">{sourceError}</p>}
             <button className="button button-dark" disabled={busy} type="submit">
               {adding ? "Haetaan ja luetaan…" : "Lisää ja hae ruokalista"}
             </button>
@@ -446,7 +464,7 @@ function AdminDashboard({
         <section className="admin-panel" aria-labelledby="crawler-title">
           <h2 id="crawler-title">Viimeisin ajo</h2>
           <dl className="admin-detail-list">
-            <div><dt>Tila</dt><dd>{data.refresh.running ? "Käynnissä" : "Valmis"}</dd></div>
+            <div><dt>Tila</dt><dd>{data.refresh.running ? "Käynnissä" : data.refresh.lastError ? "Epäonnistui" : data.refresh.lastFinishedAt ? "Valmis" : "Ei vielä ajettu"}</dd></div>
             <div><dt>Kohde</dt><dd>{data.refresh.currentTarget === "finalization" ? "Viimeistely" : data.refresh.currentTarget ?? "–"}</dd></div>
             <div><dt>Valmistui</dt><dd>{timeOrDash(data.refresh.lastFinishedAt)}</dd></div>
             <div><dt>Viimeisin haku</dt><dd>{timeOrDash(data.latestFetch.attemptedAt)}</dd></div>
@@ -465,7 +483,7 @@ function AdminDashboard({
       <section className="admin-panel admin-wide-panel" aria-labelledby="sources-title">
         <div className="admin-section-heading">
           <h2 id="sources-title">Lisätyt ravintolat</h2>
-          <span>{data.sources.length} lähdettä</span>
+          <span>{data.sources.length} {data.sources.length === 1 ? "lähde" : "lähdettä"}</span>
         </div>
         {data.sources.length === 0 ? (
           <p className="admin-empty">Sivulähteitä ei ole vielä lisätty.</p>
@@ -482,9 +500,16 @@ function AdminDashboard({
                   </a>
                 </div>
                 <div className="admin-source-state">
+                  {!source.enabled && <strong>Ei käytössä</strong>}
                   <span>{outcomeLabel(source.lastOutcome)}</span>
                   <small>{timeOrDash(source.lastRunAt)}</small>
                 </div>
+                {source.lastError && (
+                  <details className="admin-error-details admin-source-error">
+                    <summary>Viimeisimmän virheen tiedot</summary>
+                    <p>{source.lastError}</p>
+                  </details>
+                )}
               </li>
             ))}
           </ul>
@@ -556,8 +581,10 @@ export function AdminPage() {
         setMode("disabled");
         return;
       }
-      setMessage(error instanceof Error ? error.message : "Ylläpitotietoja ei saatu ladattua.");
-      setMode("error");
+      setMessage(data
+        ? "Tietoja ei saatu päivitettyä. Näytetään aiemmin ladatut tiedot. Tarkista yhteys ja yritä uudelleen."
+        : error instanceof Error ? error.message : "Ylläpitotietoja ei saatu ladattua.");
+      setMode(data ? "ready" : "error");
     }
   }
 
@@ -603,10 +630,10 @@ export function AdminPage() {
       <AdminHeader />
       {mode === "login" && <LoginPanel error={message} onLogin={login} />}
       {mode === "loading" && (
-        <main className="admin-main"><div className="state-panel" role="status">Ylläpitoa ladataan…</div></main>
+        <main className="admin-main" id="main-content" tabIndex={-1}><div className="state-panel" role="status">Ylläpitoa ladataan…</div></main>
       )}
       {(mode === "disabled" || mode === "error") && (
-        <main className="admin-main">
+        <main className="admin-main" id="main-content" tabIndex={-1}>
           <div className="state-panel state-panel-error" role="alert">
             <h1>{mode === "disabled" ? "Ylläpito ei ole käytössä" : "Ylläpitoa ei saatu ladattua"}</h1>
             <p>{message}</p>

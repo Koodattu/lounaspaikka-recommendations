@@ -46,7 +46,7 @@ typography:
     letterSpacing: "normal"
   label:
     fontFamily: "Aptos, 'Segoe UI', sans-serif"
-    fontSize: "0.8rem"
+    fontSize: "0.875rem"
     fontWeight: 720
     lineHeight: 1.3
     letterSpacing: "normal"
@@ -198,7 +198,7 @@ The palette behaves like civic wayfinding: one visible signal, one dependable ro
 - **Headline** (600, 2rem, 1.05): reader section headings and restaurant names; never form or admin headings.
 - **Title** (760, 1.25rem, 1.2): recommendation titles, admin panel headings, and prominent task labels.
 - **Body** (400, 1rem, 1.55): descriptions, rationales, and menus; prose is capped at 70ch.
-- **Label** (720, 0.8rem, 1.3): buttons, metadata labels, chips, and field labels in sentence case.
+- **Label** (720, 0.875rem, 1.3): buttons, metadata labels, chips, and field labels in sentence case. Menu text stays at 1rem; restaurant list titles use the 1.25rem Title step. Score labels wrap instead of truncating.
 - **Data** (700, 1rem, 1.2): dates, times, scores, counts, and prices with tabular numerals.
 
 **The Serif Boundary Rule.** Georgia is permitted for public decision headlines and restaurant storytelling only. It is forbidden in buttons, chips, field labels, admin controls, tables, status messages, and operational data.
@@ -225,7 +225,7 @@ Components feel aligned, compact, and touchable. They reuse a small vocabulary a
 
 - **Shape:** precise controls with a 12px radius and a 46px minimum height.
 - **Primary:** Route Green with Light on Dark text, 11px × 16px padding, and strong sentence-case labeling.
-- **Hover / Focus:** Deep Route Green on hover; a 3px Signal Clay focus outline with a 3px offset. Active state scales only to 0.96 and never shifts layout.
+- **Hover / Focus:** Deep Route Green on hover; a 3px Pressed Signal Clay focus outline with a 3px offset for sufficient contrast on light surfaces. Use Light on Dark inside dark surfaces. Active state scales only to 0.96 and never shifts layout.
 - **Secondary:** Clear Surface with Ink text and a full Quiet Divider border. Signal Clay is not a default button fill.
 
 ### Chips
@@ -244,7 +244,7 @@ Components feel aligned, compact, and touchable. They reuse a small vocabulary a
 ### Inputs / Fields
 
 - **Style:** Input Surface, a 12px radius, a full 1px Ink border at 24% opacity, 11px × 13px padding, and a 48px minimum height.
-- **Focus:** Signal Clay border plus a 3px translucent Signal Clay ring.
+- **Focus:** Pressed Signal Clay border plus a solid 3px Pressed Signal Clay outline with a 3px offset.
 - **Error / Disabled:** pair text with the semantic state surface; disabled controls retain readable text and communicate inactivity without relying on opacity alone.
 
 ### Navigation
@@ -255,6 +255,8 @@ Components feel aligned, compact, and touchable. They reuse a small vocabulary a
 ### Recommendation Wayfinder
 
 The daily view is one calm restaurant list ordered with the top three first. Every row shows the restaurant facts and complete published menu using the same structure. Recommended rows add a compact rank, total score, visible rationale, and four component scores; they never truncate the food to manufacture a highlight. A route action and the weekly restaurant view remain quieter handoffs.
+
+The first recommendation's rationale uses solid Route Green with Light on Dark text. Other rationales use a simple divider on the page surface. Native disclosure markers distinguish expandable source text and explanations. Daily navigation and standalone links retain a 46px minimum target height.
 
 **The One Decision Rule.** The current date, leading recommendation, its score, and the beginning of its complete menu must be identifiable in the first mobile viewport without relying on animation.
 

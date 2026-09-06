@@ -49,8 +49,9 @@ a {
 }
 
 button:focus-visible,
-a:focus-visible {
-  outline: 3px solid rgba(226, 90, 49, 0.42);
+a:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--signal-clay-hover);
   outline-offset: 3px;
 }
 
@@ -386,9 +387,12 @@ h3 {
 
 .dietary-markers {
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   gap: 4px;
+  justify-content: flex-end;
+  max-width: 45%;
+  overflow-wrap: anywhere;
 }
 
 .dietary-markers > span {
@@ -710,7 +714,7 @@ h3 {
   border-radius: 999px;
   color: var(--muted);
   background: rgba(255, 253, 248, 0.65);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 760;
 }
 
@@ -766,13 +770,13 @@ h3 {
 }
 
 .admin-form label {
-  font-size: 0.82rem;
+  font-size: 0.875rem;
   font-weight: 760;
 }
 
 .field-hint {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
@@ -781,7 +785,7 @@ h3 {
   min-height: 48px;
   padding: 11px 13px;
   border: 1px solid rgba(32, 38, 29, 0.24);
-  border-radius: 13px;
+  border-radius: 12px;
   color: var(--ink);
   background: #fff;
   font: inherit;
@@ -790,8 +794,9 @@ h3 {
 }
 
 .admin-form input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(226, 90, 49, 0.16);
+  border-color: var(--signal-clay-hover);
+  outline: 3px solid var(--signal-clay-hover);
+  outline-offset: 3px;
 }
 
 .admin-form input::placeholder {
@@ -818,7 +823,7 @@ h3 {
 
 .form-message {
   margin: 2px 0 0;
-  font-size: 0.84rem;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
@@ -871,7 +876,7 @@ h3 {
   padding: 13px 17px;
   border-radius: 12px;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -926,7 +931,7 @@ h3 {
 
 .admin-count-card span {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   line-height: 1.3;
 }
 
@@ -938,13 +943,13 @@ h3 {
 .admin-metrics summary,
 .admin-score-help summary,
 .admin-error-details summary {
-  display: inline-grid;
-  align-items: center;
+  display: list-item;
+  padding-block: 13px;
   width: fit-content;
   min-height: 46px;
   cursor: pointer;
   color: var(--ink);
-  font-size: 0.82rem;
+  font-size: 0.875rem;
   font-weight: 740;
   text-underline-offset: 3px;
 }
@@ -955,12 +960,13 @@ h3 {
 
 .admin-layout {
   display: grid;
-  grid-template-columns: 1.25fr 0.75fr;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
   gap: 18px;
   margin: 18px 0;
 }
 
 .admin-panel {
+  min-width: 0;
   padding: 25px;
   border-radius: 14px;
 }
@@ -983,7 +989,7 @@ h3 {
   gap: 15px;
   padding: 10px 0;
   border-top: 1px solid var(--line);
-  font-size: 0.82rem;
+  font-size: 0.875rem;
 }
 
 .admin-detail-list dt {
@@ -1003,7 +1009,7 @@ h3 {
   margin: 18px 0 0;
   border-radius: 12px;
   background: var(--danger-surface);
-  font-size: 0.82rem;
+  font-size: 0.875rem;
 }
 
 .admin-priority-error {
@@ -1017,6 +1023,7 @@ h3 {
 
 .admin-section-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
@@ -1024,7 +1031,7 @@ h3 {
 
 .admin-section-heading > span {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1048,18 +1055,18 @@ h3 {
 .admin-calibration-toolbar label,
 .admin-calibration-toolbar span {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .admin-calibration-toolbar select {
   min-height: 46px;
   padding: 8px 30px 8px 10px;
   border: 1px solid rgba(32, 38, 29, 0.24);
-  border-radius: 11px;
+  border-radius: 12px;
   color: var(--ink);
   background: #fff;
   font: inherit;
-  font-size: 0.82rem;
+  font-size: 0.875rem;
 }
 
 .admin-score-help {
@@ -1080,21 +1087,21 @@ h3 {
 }
 
 .admin-score-help dt {
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   font-weight: 740;
 }
 
 .admin-score-help dd {
   margin: 0;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
 .admin-calibration-toolbar select:focus-visible {
-  border-color: var(--accent);
-  outline: 3px solid rgba(226, 90, 49, 0.16);
-  outline-offset: 1px;
+  border-color: var(--signal-clay-hover);
+  outline: 3px solid var(--signal-clay-hover);
+  outline-offset: 3px;
 }
 
 .admin-calibration-toolbar > span {
@@ -1136,7 +1143,7 @@ h3 {
 .admin-assessment-heading > div > span,
 .admin-feedback-control > span {
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1150,7 +1157,7 @@ h3 {
 .admin-assessment-total small {
   margin-left: 2px;
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.875rem;
   letter-spacing: 0;
 }
 
@@ -1169,12 +1176,12 @@ h3 {
 
 .admin-score-breakdown dt {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .admin-score-breakdown dd {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   font-weight: 760;
   font-variant-numeric: tabular-nums;
 }
@@ -1183,20 +1190,20 @@ h3 {
   max-width: 75ch;
   margin: 13px 0 0;
   color: var(--ink);
-  font-size: 0.86rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .admin-assessment-menu {
   margin-top: 11px;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.875rem;
 }
 
 .admin-assessment-menu summary {
-  display: inline-grid;
+  display: list-item;
   min-height: 46px;
-  align-items: center;
+  padding-block: 13px;
   width: fit-content;
   cursor: pointer;
   font-weight: 720;
@@ -1230,9 +1237,9 @@ h3 {
   border-radius: 12px;
   background: transparent;
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   font-weight: 740;
-  white-space: nowrap;
+  white-space: normal;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 100ms ease;
 }
 
@@ -1245,7 +1252,7 @@ h3 {
   max-width: 70ch;
   margin: 0 0 8px;
   overflow-wrap: anywhere;
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
@@ -1307,7 +1314,7 @@ h3 {
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   overflow-wrap: anywhere;
 }
 
@@ -1317,7 +1324,7 @@ h3 {
 
 .admin-error-list span {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
@@ -1330,7 +1337,7 @@ h3 {
   min-height: 46px;
   align-items: center;
   color: inherit;
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   text-underline-offset: 3px;
 }
 
@@ -1343,7 +1350,7 @@ h3 {
   display: grid;
   gap: 4px;
   justify-items: end;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1650,7 +1657,7 @@ body {
 
 .reader-main :is(a, button, summary):focus-visible,
 .reader-header a:focus-visible {
-  outline: 3px solid var(--signal-clay);
+  outline: 3px solid var(--signal-clay-hover);
   outline-offset: 3px;
 }
 
@@ -1760,12 +1767,11 @@ body {
 .date-navigation strong,
 .week-toolbar strong {
   display: block;
-  overflow: hidden;
   font-size: 0.92rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .decision-heading {
@@ -2281,9 +2287,12 @@ body {
 
 .dietary-markers {
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   gap: 4px;
+  justify-content: flex-end;
+  max-width: 45%;
+  overflow-wrap: anywhere;
 }
 
 .dietary-markers > span {
@@ -2891,13 +2900,13 @@ body {
 }
 
 .date-navigation button {
-  width: 42px;
-  min-width: 42px;
-  height: 42px;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
 }
 
 :is(.date-navigation, .week-toolbar) :is(.today-button, .today-current) {
-  min-height: 42px;
+  min-height: 46px;
 }
 
 .daily-menus {
@@ -2906,6 +2915,7 @@ body {
 
 .daily-menus-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px 24px;
@@ -2915,7 +2925,7 @@ body {
 .daily-menus-heading > p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
 }
@@ -2923,13 +2933,13 @@ body {
 .assessment-method {
   max-width: 60ch;
   color: var(--ink);
-  font-size: 0.78rem;
+  font-size: 0.875rem;
 }
 
 .assessment-method summary {
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
+  display: list-item;
+  min-height: 46px;
+  padding-block: 13px;
   cursor: pointer;
   font-weight: 720;
   text-decoration: underline;
@@ -2948,7 +2958,7 @@ body {
   min-height: 52px !important;
   margin: 0 0 8px;
   padding: 10px 12px !important;
-  font-size: 0.82rem;
+  font-size: 0.875rem;
 }
 
 .daily-menu-list {
@@ -2991,14 +3001,18 @@ body {
   margin: 0;
   color: var(--ink);
   font-family: Aptos, "Segoe UI", sans-serif;
-  font-size: 1.05rem;
+  font-size: 1.25rem;
   font-weight: 760;
   letter-spacing: -0.015em;
   line-height: 1.2;
   text-wrap: balance;
+  overflow-wrap: anywhere;
 }
 
 .daily-menu-title-line h3 a {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
   color: inherit;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
@@ -3013,7 +3027,7 @@ body {
   border-radius: 999px;
   color: var(--light-on-dark);
   background: var(--route-green);
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
   font-weight: 760;
 }
@@ -3036,7 +3050,7 @@ body {
 }
 
 .row-assessment-score small {
-  font-size: 0.68rem;
+  font-size: 0.875rem;
   font-weight: 700;
   letter-spacing: 0;
 }
@@ -3046,7 +3060,7 @@ body {
 .menu-provenance {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 0.77rem;
+  font-size: 0.875rem;
   line-height: 1.35;
   text-wrap: pretty;
 }
@@ -3064,8 +3078,8 @@ body {
 }
 
 .daily-menu-actions .text-link {
-  min-height: 40px;
-  font-size: 0.78rem;
+  min-height: 46px;
+  font-size: 0.875rem;
 }
 
 .menu-provenance {
@@ -3084,7 +3098,7 @@ body {
   display: block;
   margin: 0 0 6px;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.875rem;
   font-weight: 720;
   line-height: 1.2;
 }
@@ -3104,7 +3118,7 @@ body {
 
 .daily-menu-content .course-line,
 .daily-menu-content > .menu-text {
-  font-size: 0.9rem;
+  font-size: 1rem;
   line-height: 1.4;
 }
 
@@ -3115,18 +3129,17 @@ body {
 }
 
 .daily-menu-content .raw-menu summary {
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
-  font-size: 0.75rem;
+  display: list-item;
+  min-height: 46px;
+  padding-block: 13px;
+  font-size: 0.875rem;
 }
 
 .menu-assessment {
   align-self: start;
-  padding: 11px 12px;
-  border-radius: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--quiet-divider);
   color: var(--ink);
-  background: rgba(51, 76, 57, 0.075);
 }
 
 .assessment-heading {
@@ -3134,7 +3147,7 @@ body {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 760;
   line-height: 1.2;
 }
@@ -3143,14 +3156,14 @@ body {
   display: grid;
   gap: 3px;
   margin: 7px 0 0;
-  font-size: 0.82rem;
+  font-size: 0.875rem;
   line-height: 1.42;
   text-wrap: pretty;
 }
 
 .assessment-breakdown {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
   gap: 4px 12px;
   margin: 10px 0 0;
 }
@@ -3168,15 +3181,14 @@ body {
 .assessment-breakdown dt,
 .assessment-breakdown dd {
   margin: 0;
-  font-size: 0.68rem;
+  font-size: 0.875rem;
   line-height: 1.25;
 }
 
 .assessment-breakdown dt {
-  overflow: hidden;
   color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .assessment-breakdown dd {
@@ -3217,15 +3229,7 @@ body {
   }
 
   .daily-menu-title-line {
-    align-items: flex-start;
-  }
-
-  .daily-menu-title-line h3 {
-    padding-top: 4px;
-  }
-
-  .row-assessment-score {
-    padding-top: 6px;
+    align-items: center;
   }
 }
 
@@ -3246,6 +3250,25 @@ body {
 
   .daily-menu-restaurant {
     grid-area: restaurant;
+  }
+
+  .daily-menu-title-line {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 4px 8px;
+  }
+
+  .daily-menu-title-line h3,
+  .row-assessment-score {
+    grid-column: 2;
+  }
+
+  .daily-menu-row:not(.is-recommended) .daily-menu-title-line h3 {
+    grid-column: 1 / -1;
+  }
+
+  .row-assessment-score {
+    margin-bottom: 6px;
   }
 
   .daily-menu-content {
@@ -3276,6 +3299,97 @@ body {
 
   .daily-menu-content .course-line,
   .daily-menu-content > .menu-text {
-    font-size: 0.92rem;
+    font-size: 1rem;
+  }
+}
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 12px;
+  z-index: 1;
+  min-height: 46px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  color: var(--light-on-dark);
+  background: var(--olive);
+  transform: translateY(calc(-100% - 16px));
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+main:focus-visible {
+  outline: 2px solid var(--signal-clay-hover);
+  outline-offset: 4px;
+}
+
+.status-dot {
+  flex: 0 0 auto;
+}
+
+.status-dot-error {
+  background: var(--danger-ink);
+}
+
+.admin-source-error {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.admin-assessment-heading strong,
+.admin-source-list strong,
+.restaurant-hero h1 {
+  overflow-wrap: anywhere;
+}
+
+.brand-copy small,
+.dietary-markers > span,
+.course-list small,
+.dietary-safety-note,
+.menu-data-notice,
+.restaurant-meta,
+.day-row-facts,
+.day-row-title small,
+.raw-menu,
+.hours,
+.restaurant-provenance p,
+.source-footer {
+  font-size: 0.875rem;
+}
+
+.rank-1 .menu-assessment {
+  padding: 14px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--light-on-dark);
+  background: var(--route-green);
+}
+
+.rank-1 .assessment-breakdown > div {
+  border-color: rgba(255, 250, 241, 0.3);
+}
+
+.rank-1 .assessment-breakdown dt {
+  color: inherit;
+}
+
+.source-footer a,
+.menu-provenance a,
+.restaurant-provenance a {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+
+@media (forced-colors: active) {
+  .rank-marker {
+    border: 1px solid ButtonText;
+  }
+
+  .admin-feedback-button[aria-pressed="true"] {
+    border: 2px solid Highlight;
   }
 }

@@ -130,6 +130,31 @@ describe("reader app", () => {
     vi.restoreAllMocks();
   });
 
+  it.each(["pending", "ready", "unavailable"])("provides a recovery path for an empty %s day", async (status) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      ...dayResponse, menus: [], recommendations: [], status,
+    })));
+    render(<App />);
+    expect(await screen.findByText(/yllä olevilla nuolilla/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Seuraava päivä" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Siirry sisältöön" }).getAttribute("href"))
+      .toBe("#main-content");
+    expect(screen.getByRole("main").id).toBe("main-content");
+  });
+
+  it("recovers the selected day after a network failure", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(new Response(JSON.stringify(dayResponse)));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Yritä uudelleen" }));
+    expect(await screen.findByRole("heading", { name: "Vinola", level: 3 })).toBeTruthy();
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/days/2026-07-14", "/api/days/2026-07-14",
+    ]);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("uses an injected browser adapter for local navigation", async () => {
     let location: BrowserLocation = { pathname: "/", search: "?date=2026-07-14" };
     const push = vi.fn((path: string) => {

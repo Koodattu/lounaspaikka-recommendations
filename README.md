@@ -76,7 +76,7 @@ Dates use `YYYY-MM-DD`. Restaurant weeks must start on a Monday.
 | `DATABASE_PATH` | `data/lunch.sqlite` | SQLite file path; Compose sets `/data/lunch.sqlite`. |
 | `OPENAI_API_KEY` | empty | Enables custom page extraction, assessment, and top-three generation. |
 | `OPENAI_ADMIN_SOURCE_REQUEST_BUDGET` | `20` | Maximum OpenAI requests for one admin source-add action; `0` blocks them. |
-| `OPENAI_MODEL` | `gpt-5.6-luna` | Model used for structured extraction and assessment. Changing it creates new provenance. |
+| `OPENAI_MODEL` | `gpt-6-luna` | Model used for structured extraction and assessment. Changing it creates new provenance. |
 | `OPENAI_REFRESH_REQUEST_BUDGET` | `100` | Maximum OpenAI requests shared by one startup or scheduled refresh; `0` blocks them. |
 | `PORT` | `3000` | Backend HTTP port. |
 | `SITE_ADDRESS` | `http://localhost` | Caddy site address and production hostname. |

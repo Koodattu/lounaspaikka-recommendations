@@ -98,7 +98,7 @@ export interface RecommendationResult {
 }
 
 export const defaultRecommendationVersions: RecommendationVersions = {
-  model: "gpt-5.6-luna",
+  model: "gpt-6-luna",
   profileVersion: "shared-v1",
   promptVersion: "v5",
   rankingVersion: "rankable-weighted-v2",

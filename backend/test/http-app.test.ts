@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 
 import { openDatabase } from "../src/database.js";
 import { createServer } from "../src/http-app.js";
+import { createCustomSourceService } from "../src/custom-sources.js";
 import { assessAndRankDay } from "../src/recommendations.js";
 import { createRestaurantCatchment } from "../src/restaurant-catchment.js";
 import { capturedOffering, catchmentAdapterForOfferings } from "./catchment-fixture.js";
@@ -25,6 +26,74 @@ describe("reader API", () => {
   afterEach(async () => {
     await app?.close();
     db?.close();
+  });
+
+  it("identifies failed source updates beside retained menus without marking healthy sources stale", async () => {
+    db = openDatabase(":memory:");
+    let timestamp = "2026-07-14T03:00:00.000Z";
+    let fail = false;
+    const custom = createCustomSourceService({
+      db, model: "synthetic-test", now: () => new Date(timestamp),
+      fetchPage: async (url) => {
+        if (fail) throw new Error("synthetic connection failure");
+        return { body: "menu", text: "menu", finalUrl: url, httpStatus: 200, truncated: false };
+      },
+      extractor: async ({ serviceDates }) => ({ extraction: {
+        pageType: "restaurant_page",
+        restaurant: { name: "Oma ravintola", address: null, city: "Seinäjoki", description: null, phone: null, openingHours: [] },
+        menus: serviceDates.map((serviceDate) => ({
+          serviceDate, status: "published", menuText: "Kasviskeitto", lunchHours: null, priceText: null, title: "Lounas",
+        })),
+      } }),
+    });
+    const source = await custom.addAndCrawl("https://example.com/menu", ["2026-07-14"]);
+    fail = true;
+    timestamp = "2026-07-14T04:00:00.000Z";
+    await expect(custom.addAndCrawl("https://example.com/menu", ["2026-07-14", "2026-07-15"]))
+      .rejects.toThrow();
+    await createRestaurantCatchment({
+      db, now: () => new Date("2026-07-14T05:00:00.000Z"),
+      lounaspaikka: catchmentAdapterForOfferings([item("main", "Pääravintola", "Kuhaa")]),
+    }).refresh("2026-07-14");
+    app = createServer({ db });
+
+    const day = (await app.inject("/api/days/2026-07-14")).json();
+    expect(day.stale).toBe(true);
+    expect(day.menus.find((entry: { restaurant: { id: string } }) => entry.restaurant.id === source.restaurantId))
+      .toMatchObject({
+        stale: true, lastAttemptAt: "2026-07-14T04:00:00.000Z", fetchedAt: "2026-07-14T03:00:00.000Z",
+        menu: { text: "Kasviskeitto" },
+      });
+    expect(day.menus.find((entry: { restaurant: { id: string } }) => entry.restaurant.id === "main"))
+      .toMatchObject({ stale: false, lastAttemptAt: "2026-07-14T05:00:00.000Z" });
+    const week = (await app.inject(`/api/restaurants/${source.restaurantId}/weeks/2026-07-13`)).json();
+    expect(week.days[0]).toMatchObject({ status: "missing", stale: false, lastAttemptAt: null });
+    expect(week.days[1]).toMatchObject({
+      stale: true, lastAttemptAt: "2026-07-14T04:00:00.000Z", fetchedAt: "2026-07-14T03:00:00.000Z", text: "Kasviskeitto",
+    });
+    expect(week.days[2]).toMatchObject({
+      stale: true, lastAttemptAt: "2026-07-14T04:00:00.000Z", fetchedAt: null, status: "missing", text: null,
+    });
+
+    fail = false;
+    timestamp = "2026-07-14T06:00:00.000Z";
+    await custom.addAndCrawl("https://example.com/menu", ["2026-07-14", "2026-07-15"]);
+    const recovered = (await app.inject(`/api/restaurants/${source.restaurantId}/weeks/2026-07-13`)).json();
+    expect(recovered.days[1]).toMatchObject({
+      stale: false, fetchedAt: "2026-07-14T06:00:00.000Z", lastAttemptAt: "2026-07-14T06:00:00.000Z", text: "Kasviskeitto",
+    });
+    expect((await app.inject("/api/days/2026-07-14")).json().stale).toBe(false);
+
+    await expect(createRestaurantCatchment({
+      db, now: () => new Date("2026-07-14T07:00:00.000Z"),
+      lounaspaikka: { observe: async () => { throw new Error("synthetic primary-source failure"); } },
+    }).refresh("2026-07-14")).rejects.toThrow("synthetic primary-source failure");
+    const primaryFailure = (await app.inject("/api/restaurants/main/weeks/2026-07-13")).json();
+    expect(primaryFailure.days[1]).toMatchObject({
+      stale: true, lastAttemptAt: "2026-07-14T07:00:00.000Z", fetchedAt: "2026-07-14T05:00:00.000Z", text: "Kuhaa",
+    });
+    expect((await app.inject(`/api/restaurants/${source.restaurantId}/weeks/2026-07-13`)).json().days[1].stale)
+      .toBe(false);
   });
 
   it("serves health, a Finnish-ready day and a seven-day restaurant week", async () => {

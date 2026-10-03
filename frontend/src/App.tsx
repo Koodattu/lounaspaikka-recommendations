@@ -6,6 +6,7 @@ import {
   formatLongDate,
   formatShortDate,
   formatUpdatedAt,
+  formatWeekday,
   startOfWeek,
   todayInHelsinki,
 } from "./dates";
@@ -157,6 +158,27 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
       <p>Tarkista yhteys ja yritä uudelleen.</p>
       <button className="button button-dark" type="button" onClick={onRetry}>Yritä uudelleen</button>
     </div>
+  );
+}
+
+function MenuUpdateNotice({
+  fetchedAt,
+  lastAttemptAt,
+  source,
+}: {
+  fetchedAt: string | null;
+  lastAttemptAt?: string | null;
+  source: { url: string };
+}) {
+  return (
+    <aside className="menu-update-notice" aria-label="Ruokalistan päivitys">
+      <strong>Päivitys epäonnistui.</strong>
+      {lastAttemptAt && <span>Hakuyritys {formatUpdatedAt(lastAttemptAt)}</span>}
+      <p>{fetchedAt
+        ? `Näytämme aiemmat tiedot: ${formatUpdatedAt(fetchedAt)}.`
+        : "Tälle päivälle ei ole aiemmin haettuja tietoja."}</p>
+      <a href={source.url} target="_blank" rel="noreferrer">Tarkista lähdesivu<NewTabHint /></a>
+    </aside>
   );
 }
 
@@ -480,7 +502,7 @@ function DailyMenuList({
                     )}
                   </div>
                   <p className="menu-provenance">
-                    <span>Päivitetty {formatUpdatedAt(entry.fetchedAt)}</span>
+                    {!entry.stale && <span>Päivitetty {formatUpdatedAt(entry.fetchedAt)}</span>}
                     {source.url !== data.source.url && (
                       <a href={source.url} target="_blank" rel="noreferrer">
                         {source.name}
@@ -488,6 +510,9 @@ function DailyMenuList({
                       </a>
                     )}
                   </p>
+                  {entry.stale && (
+                    <MenuUpdateNotice fetchedAt={entry.fetchedAt} lastAttemptAt={entry.lastAttemptAt} source={source} />
+                  )}
                 </header>
 
                 <div className="daily-menu-content">
@@ -651,10 +676,15 @@ function EmptyDayMessage({ day }: { day: RestaurantDay }) {
   );
 }
 
-function DayMenu({ day }: { day: RestaurantDay }) {
-  return day.text || day.structuredMenu?.courses.length
-    ? <MenuContent menu={day} />
-    : <EmptyDayMessage day={day} />;
+function DayMenu({ day, source }: { day: RestaurantDay; source: { url: string } }) {
+  return (
+    <>
+      {day.stale && <MenuUpdateNotice fetchedAt={day.fetchedAt} lastAttemptAt={day.lastAttemptAt} source={day.source ?? source} />}
+      {day.text || day.structuredMenu?.courses.length
+        ? <MenuContent menu={day} />
+        : !day.stale && <EmptyDayMessage day={day} />}
+    </>
+  );
 }
 
 function RestaurantPage({
@@ -729,6 +759,7 @@ function RestaurantPage({
     ? data.days.filter((day) => day.serviceDate !== activeDay.serviceDate)
     : [];
   const displayedDate = activeDay?.serviceDate ?? selectedDate;
+  const weekHasFailedUpdates = data?.days.some((day) => day.stale) ?? false;
   const returnDate = displayedDate;
   const today = todayInHelsinki();
 
@@ -740,7 +771,9 @@ function RestaurantPage({
   const loadedWeekAnnouncement = !loading && !error && data
     ? activeDay
       ? `${data.restaurant.name}: ${formatLongDate(activeDay.serviceDate)} ladattu.`
-      : `${data.restaurant.name}: viikolle ${formatShortDate(week)}–${formatShortDate(addDays(week, 6))} ei löytynyt ruokalistaa.`
+      : weekHasFailedUpdates
+        ? `${data.restaurant.name}: Viikon tietoja puuttuu päivitysvirheen vuoksi.`
+        : `${data.restaurant.name}: viikolle ${formatShortDate(week)}–${formatShortDate(addDays(week, 6))} ei löytynyt ruokalistaa.`
     : "";
 
   if (error === "not-found") return <RestaurantNotFoundPage date={selectedDate} query={query} />;
@@ -810,6 +843,22 @@ function RestaurantPage({
           <section className="restaurant-content" aria-labelledby="week-menu-title">
             <h2 className="visually-hidden" id="week-menu-title">Viikon ruokalista</h2>
             <div className="week-main">
+              {data.days.length > 0 && (
+                <nav className="week-days" aria-label="Viikon päivät">
+                  {data.days.map((day) => (
+                    <button
+                      type="button"
+                      key={day.serviceDate}
+                      aria-label={formatLongDate(day.serviceDate)}
+                      aria-pressed={day.serviceDate === displayedDate}
+                      onClick={() => changeDate(day.serviceDate)}
+                    >
+                      <span>{formatWeekday(day.serviceDate)}</span>
+                      <strong>{formatShortDate(day.serviceDate)}</strong>
+                    </button>
+                  ))}
+                </nav>
+              )}
               {activeDay ? (
                 <>
                   <article className="selected-day">
@@ -821,7 +870,7 @@ function RestaurantPage({
                       </div>
                     </header>
                     {hasDietaryMarkers(activeDay) && <DietarySafetyNote />}
-                    <DayMenu day={activeDay} />
+                    <DayMenu day={activeDay} source={data.source} />
                   </article>
 
                   <section className="other-days" aria-labelledby="other-days-title">
@@ -837,7 +886,7 @@ function RestaurantPage({
                               {[day.lunchHours, day.priceText].filter(Boolean).join(" · ")}
                             </span>
                           </header>
-                          <div className="day-row-body"><DayMenu day={day} /></div>
+                          <div className="day-row-body"><DayMenu day={day} source={data.source} /></div>
                         </article>
                       ))}
                     </div>
@@ -849,7 +898,15 @@ function RestaurantPage({
                 </>
               ) : (
                 <section className="state-panel empty-week-state" aria-labelledby="empty-week-title">
-                  <h2 id="empty-week-title">Viikolle ei löytynyt ruokalistaa.</h2>
+                  <h2 id="empty-week-title">{weekHasFailedUpdates
+                    ? "Viikon tietoja puuttuu."
+                    : "Viikolle ei löytynyt ruokalistaa."}</h2>
+                  {weekHasFailedUpdates && (
+                    <p>Osa viikon tiedoista jäi hakematta päivitysvirheen vuoksi.</p>
+                  )}
+                  {data.days.filter((day) => day.serviceDate === selectedDate && day.stale).map((day) => (
+                    <MenuUpdateNotice key={day.serviceDate} fetchedAt={day.fetchedAt} lastAttemptAt={day.lastAttemptAt} source={day.source ?? data.source} />
+                  ))}
                   <p>Vaihda viikkoa tai palaa valitun päivän suosituksiin.</p>
                   <a className="button button-dark" href={dayHref(returnDate, query)}>
                     Palaa suosituksiin

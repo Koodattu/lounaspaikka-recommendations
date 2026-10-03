@@ -137,6 +137,7 @@ function AdminDashboard({
   onLogout,
   onRefresh,
   onSessionExpired,
+  onSourceFetched,
   onSourceUrlChange,
   sourceUrl,
 }: {
@@ -146,10 +147,13 @@ function AdminDashboard({
   onLogout: () => Promise<void>;
   onRefresh: () => Promise<void>;
   onSessionExpired: () => void;
+  onSourceFetched: (sourceId: number) => void;
   onSourceUrlChange: (url: string) => void;
   sourceUrl: string;
 }) {
-  const [adding, setAdding] = useState(false);
+  const [sourceAction, setSourceAction] = useState<number | "new" | null>(null);
+  const [retryResult, setRetryResult] = useState<{ sourceId: number; error: boolean; message: string } | null>(null);
+  const adding = sourceAction === "new";
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -168,7 +172,7 @@ function AdminDashboard({
   const visibleAssessments = data.recentAssessments.filter(
     (assessment) => assessment.serviceDate === selectedAssessmentDate,
   );
-  const busy = adding || loggingOut || refreshing || savingAssessmentId !== null;
+  const busy = sourceAction !== null || loggingOut || refreshing || savingAssessmentId !== null;
   const needsAttention = Boolean(
     data.refresh.lastError
     || data.sources.some((source) => source.enabled && source.lastError)
@@ -183,29 +187,44 @@ function AdminDashboard({
 
   async function addSource(event: FormEvent) {
     event.preventDefault();
-    setAdding(true);
-    setSourceError(null);
-    setSourceMessage(null);
+    await fetchSource(sourceUrl);
+  }
+
+  async function fetchSource(url: string, sourceId?: number) {
+    setSourceAction(sourceId ?? "new");
+    if (sourceId === undefined) {
+      setSourceError(null);
+      setSourceMessage(null);
+    } else {
+      setRetryResult(null);
+    }
     try {
       await adminRequest("/api/admin/sources", {
-        body: JSON.stringify({ url: sourceUrl }),
+        body: JSON.stringify({ url }),
         headers: { "content-type": "application/json" },
         method: "POST",
       });
-      onSourceUrlChange("");
-      setSourceMessage("Lähde lisättiin ja ruokalista haettiin.");
+      if (sourceId === undefined) {
+        onSourceUrlChange("");
+        setSourceMessage("Lähde lisättiin ja ruokalista haettiin.");
+      } else {
+        onSourceFetched(sourceId);
+        setRetryResult({ sourceId, error: false, message: "Ruokalista haettiin uudelleen." });
+      }
       await onRefresh();
     } catch (error) {
       if (error instanceof AdminRequestError && error.status === 401) {
         onSessionExpired();
         return;
       }
-      setSourceError(error instanceof Error ? error.message : "Lähteen lisäys epäonnistui.");
+      const message = error instanceof Error ? error.message : "Ruokalistan haku epäonnistui.";
+      if (sourceId === undefined) setSourceError(message);
+      else setRetryResult({ sourceId, error: true, message });
       if (error instanceof AdminRequestError && error.status === 422) {
         await onRefresh();
       }
     } finally {
-      setAdding(false);
+      setSourceAction(null);
     }
   }
 
@@ -511,7 +530,7 @@ function AdminDashboard({
         ) : (
           <ul className="admin-source-list">
             {data.sources.map((source) => (
-              <li key={source.id}>
+              <li key={source.id} aria-busy={sourceAction === source.id}>
                 <div>
                   <strong>{source.restaurantName ?? "Nimeä ei vielä löytynyt"}</strong>
                   <a href={source.url} rel="noreferrer" target="_blank">
@@ -524,7 +543,26 @@ function AdminDashboard({
                   {!source.enabled && <strong>Ei käytössä</strong>}
                   <span>{outcomeLabel(source.lastOutcome)}</span>
                   <small>{timeOrDash(source.lastRunAt)}</small>
+                  {source.enabled && (
+                    <button
+                      className="button admin-secondary-button"
+                      type="button"
+                      aria-label={`Hae uudelleen: ${source.restaurantName ?? source.url}`}
+                      disabled={busy}
+                      onClick={() => void fetchSource(source.url, source.id)}
+                    >
+                      {sourceAction === source.id ? "Haetaan…" : "Hae uudelleen"}
+                    </button>
+                  )}
                 </div>
+                {retryResult?.sourceId === source.id && (
+                  <p
+                    className={`admin-source-result form-message ${retryResult.error ? "form-message-error" : "form-message-ok"}`}
+                    role={retryResult.error ? "alert" : "status"}
+                  >
+                    {retryResult.message}
+                  </p>
+                )}
                 {source.lastError && (
                   <details className="admin-error-details admin-source-error">
                     <summary>Viimeisimmän virheen tiedot</summary>
@@ -551,7 +589,7 @@ function AdminDashboard({
                 <div>
                   <strong>{outcomeLabel(error.outcome)}</strong>
                   <span>{error.sourceUrl
-                    ? "Tarkista lähdesivu ja yritä hakua uudelleen Lisää ruokalistasivu -lomakkeella."
+                    ? "Tarkista lähdesivu ja hae se uudelleen Lisätyt ravintolat -osiosta."
                     : "Hakua yritetään uudelleen seuraavassa ajastetussa keräyksessä."}</span>
                   <details className="admin-error-details admin-error-row-details">
                     <summary>Tekniset tiedot</summary>
@@ -661,6 +699,16 @@ export function AdminPage() {
     } : current);
   }
 
+  function sourceFetched(sourceId: number) {
+    setData((current) => current ? {
+      ...current,
+      sources: current.sources.map((source) => source.id === sourceId
+        // The POST confirms success but provides no timestamp. The overview supplies it.
+        ? { ...source, lastOutcome: "success", lastError: null, lastRunAt: null }
+        : source),
+    } : current);
+  }
+
   return (
     <>
       <AdminHeader />
@@ -689,6 +737,7 @@ export function AdminPage() {
           onLogout={logout}
           onRefresh={loadOverview}
           onSessionExpired={sessionExpired}
+          onSourceFetched={sourceFetched}
           onSourceUrlChange={setSourceUrl}
           sourceUrl={sourceUrl}
         />

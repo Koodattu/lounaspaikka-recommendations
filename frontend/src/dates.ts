@@ -56,3 +56,9 @@ export function formatUpdatedAt(value: string): string {
     timeZone: "Europe/Helsinki",
   }).format(new Date(value));
 }
+
+export function formatWeekday(value: string): string {
+  const day = new Intl.DateTimeFormat("fi-FI", { weekday: "short", timeZone: "Europe/Helsinki" })
+    .format(new Date(`${value}T09:00:00.000Z`));
+  return day.charAt(0).toLocaleUpperCase("fi-FI") + day.slice(1);
+}

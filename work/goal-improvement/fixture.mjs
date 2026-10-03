@@ -7,23 +7,26 @@ import { addDays } from "../../backend/dist/dates.js";
 const names = ["Lounastupa Aava", "Ravintola Pihlaja", "Keittiö Joki", "Kahvila Kanerva"];
 const dishes = ["Paahdettua kuhaa ja sitruunaperunoita", "Kasviscurry ja basmatiriisi", "Lihapullat ja perunamuusi", "Lohikeitto ja ruisleipä"];
 
-export async function createFixture({ restaurants = 32, days = 7, firstDate = "2026-09-28" } = {}) {
+export async function createFixture({ restaurants = 32, days = 7, firstDate = "2026-09-28", varied = false } = {}) {
   const db = openDatabase(":memory:");
   const catchment = createRestaurantCatchment({
     db,
     now: () => new Date("2026-10-03T03:15:00Z"),
     lounaspaikka: {
       async observe(serviceDate) {
+        const dayOffset = varied ? Math.round((Date.parse(serviceDate) - Date.parse(firstDate)) / 86_400_000) : 0;
         return {
           request: { serviceDate },
           pages: [{ body: "synthetic preview fixture", status: 200, url: "https://example.test/menu" }],
           offerings: Array.from({ length: restaurants }, (_, i) => ({
             id: `demo-${i + 1}`, name: i < 4 ? names[i] : `Lounaskeittiö ${i + 1}`,
             address: `Esimerkkikatu ${i + 1}`, city: i % 3 === 0 ? "Ilmajoki" : "Seinäjoki",
-            availability: i % 11 === 10 ? "not_published" : "published",
+            availability: i % 11 === 10 || (varied && i === 0 && dayOffset === 6) ? "not_published" : "published",
             descriptionText: "Synteettinen paikallisen lounasravintolan esimerkki.",
             latitude: null, longitude: null, lunchHours: "10.30–14.00",
-            menuText: i % 11 === 10 ? null : `${dishes[i % 4]}\nVihersalaatti\nMarjarahka`,
+            menuText: i % 11 === 10 || (varied && i === 0 && dayOffset === 6)
+              ? null
+              : `${dishes[(i + dayOffset) % 4]}\nVihersalaatti\nMarjarahka${varied && i === 1 ? "\nTalon leipää, kasvislevitettä ja paahdettuja siemeniä\nKahvi, tee ja päivän pieni makea sisältyvät lounaaseen" : ""}`,
             menuTitle: "Päivän lounas", priceText: "13,50 €",
             openingHours: [{ mon: [{ open: "10.30", close: "15.00" }] }],
             phone: null, photoUrl: null, websiteUrl: "https://example.test/menu",

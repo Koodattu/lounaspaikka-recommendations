@@ -2549,6 +2549,49 @@ body {
   border: 0;
 }
 
+.week-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.week-days button {
+  display: grid;
+  flex: 1 0 calc((100% - 12px) / 7);
+  min-width: 2.9rem;
+  min-height: 64px;
+  gap: 2px;
+  padding: 8px 2px;
+  border: 1px solid var(--quiet-divider);
+  border-radius: 12px;
+  background: var(--clear-surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.week-days button[aria-pressed="true"] {
+  background: var(--route-green);
+  color: var(--light-on-dark);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (hover: hover) {
+  .week-days button:hover {
+    border-color: var(--ink);
+  }
+}
+
+@media (max-width: 359px) {
+  .week-days button {
+    flex-basis: calc((100% - 6px) / 4);
+  }
+}
+
 .selected-day {
   padding: 16px;
   border: 1px solid var(--quiet-divider);
@@ -2952,6 +2995,37 @@ body {
   gap: 8px 20px;
   grid-column: 1 / -1;
   font-size: 0.875rem;
+}
+
+.menu-update-notice {
+  display: grid;
+  gap: 4px;
+  margin-block: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--warning-surface);
+  color: var(--warning-ink);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.admin-source-result {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.menu-update-notice p {
+  margin: 0;
+}
+
+.menu-update-notice a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  width: fit-content;
+  color: inherit;
+  font-weight: 720;
+  text-underline-offset: 3px;
 }
 
 .day-wayfinding > .reader-actions {

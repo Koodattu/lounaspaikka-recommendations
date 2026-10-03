@@ -106,6 +106,8 @@ describe("Daily offering snapshot", () => {
     ).toEqual(["main"]);
     expect(getRestaurantWeek(db, "custom:1", "2026-07-13")?.days[1]).toMatchObject({
       status: "missing",
+      stale: false,
+      lastAttemptAt: null,
       text: null,
     });
 

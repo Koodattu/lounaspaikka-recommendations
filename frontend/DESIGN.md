@@ -251,6 +251,7 @@ Components feel aligned, compact, and touchable. They reuse a small vocabulary a
 
 - **Style:** a quiet header with the local mark, a full-width divider, and no decorative navigation. The date navigator is the primary wayfinding control: one aligned row, 46px arrow targets, a sentence-case context label, and a tabular date.
 - **Mobile treatment:** the date navigator spans the content width and precedes the decision headline, establishing date context before the recommendation; secondary catchment metadata may collapse, but the date and next/previous actions never do.
+- **Within a restaurant week:** seven named day buttons precede the selected menu. Route Green, an underline, and `aria-pressed` identify the selection. Buttons wrap at narrow widths or enlarged text; the other full menus remain below for comparison.
 
 ### Recommendation Wayfinder
 
@@ -263,6 +264,8 @@ The first recommendation's rationale uses solid Route Green with Light on Dark t
 ### Safety and Status
 
 Automatically extracted dietary markers never stand alone. An always-visible sentence tells readers to verify allergens with the restaurant, while a native disclosure contains the longer explanation. Loading and successful date/week changes are announced through stable polite status regions, and an empty week always provides a recovery path.
+
+Failed-update notices sit beside the affected menu, using the Warning Pair and explicit text. They distinguish the failed attempt from the retained observation, or explain that no previous data exists, and offer a source link. Admin source retries report progress and results in the same source row while retaining unrelated form input.
 
 ## 6. Do's and Don'ts
 

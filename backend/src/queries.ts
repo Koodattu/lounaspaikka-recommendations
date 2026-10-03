@@ -18,6 +18,8 @@ import {
 
 export interface DayMenu {
   fetchedAt: string;
+  lastAttemptAt: string | null;
+  stale: boolean;
   menu: {
     lunchHours: string | null;
     priceText: string | null;
@@ -131,12 +133,50 @@ export function getDayMenus(
     snapshot.entries.map((entry) => entry.revisionId),
     versions,
   );
+  const fetchStates = sourceFetchStates(db, [serviceDate]);
+  const stateBySource = new Map(fetchStates.map((state) => [state.customSourceId, state]));
 
   return snapshot.entries.map((entry) => ({
     fetchedAt: entry.fetchedAt,
+    lastAttemptAt: stateBySource.get(entry.restaurant.customSourceId)?.lastAttemptAt ?? null,
+    stale: stateBySource.get(entry.restaurant.customSourceId)?.stale ?? false,
     menu: menuFor(entry, structuredMenus.get(entry.revisionId) ?? null),
     restaurant: restaurantFor(entry),
   }));
+}
+
+// Read latest attempts separately from the latest successful menu snapshot.
+// A failed first attempt matters even when there is no menu to fall back to.
+function sourceFetchStates(
+  db: Database.Database,
+  serviceDates: string[],
+  customSourceId?: number | null,
+): Array<{ customSourceId: number | null; lastAttemptAt: string | null; serviceDate: string; stale: boolean }> {
+  const rows = db.prepare(`
+    WITH requested_dates(service_date) AS (
+      VALUES ${serviceDates.map(() => "(?)").join(", ")}
+    ), active_sources(custom_source_id) AS (
+      SELECT NULL
+      UNION ALL
+      SELECT id FROM custom_sources WHERE enabled = 1
+    ), attempts AS (
+      SELECT requested_dates.service_date, active_sources.custom_source_id, (
+        SELECT fetch.id FROM source_fetches fetch
+        WHERE fetch.service_date = requested_dates.service_date
+          AND fetch.custom_source_id IS active_sources.custom_source_id
+        ORDER BY fetch.id DESC LIMIT 1
+      ) AS id
+      FROM requested_dates CROSS JOIN active_sources
+      ${customSourceId === undefined ? "" : "WHERE active_sources.custom_source_id IS ?"}
+    )
+    SELECT attempts.service_date AS serviceDate,
+      attempts.custom_source_id AS customSourceId,
+      fetch.finished_at AS lastAttemptAt, fetch.outcome
+    FROM attempts LEFT JOIN source_fetches fetch ON fetch.id = attempts.id
+  `).all(...serviceDates, ...(customSourceId === undefined ? [] : [customSourceId])) as Array<{
+    customSourceId: number | null; lastAttemptAt: string | null; outcome: string | null; serviceDate: string;
+  }>;
+  return rows.map(({ outcome, ...row }) => ({ ...row, stale: outcome !== null && outcome !== "success" }));
 }
 
 export function getOfferingHistory(
@@ -364,10 +404,12 @@ export function getRestaurantWeek(
 ): {
   days: Array<{
     fetchedAt: string | null;
+    lastAttemptAt: string | null;
     lunchHours: string | null;
     priceText: string | null;
     serviceDate: string;
     source: DayMenu["menu"]["source"] | null;
+    stale: boolean;
     status: string;
     structuredMenu: StructuredMenu | null;
     text: string | null;
@@ -395,11 +437,10 @@ export function getRestaurantWeek(
     .get(restaurantId) as RestaurantRow | undefined;
   if (!restaurant) return null;
 
-  const snapshots = getDailyOfferingSnapshots(
-    db,
-    Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
-    restaurantId,
-  );
+  const serviceDates = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const snapshots = getDailyOfferingSnapshots(db, serviceDates, restaurantId);
+  const stateByDate = new Map(sourceFetchStates(db, serviceDates, restaurant.custom_source_id)
+    .map((state) => [state.serviceDate, state]));
   const structuredMenus = structuredMenusFor(
     db,
     snapshots.flatMap((snapshot) => snapshot.entries.map((entry) => entry.revisionId)),
@@ -410,10 +451,12 @@ export function getRestaurantWeek(
     const menu = observed ? menuFor(observed, structuredMenus.get(observed.revisionId) ?? null) : null;
     return {
       fetchedAt: observed?.fetchedAt ?? null,
+      lastAttemptAt: stateByDate.get(serviceDate)?.lastAttemptAt ?? null,
       lunchHours: menu?.lunchHours ?? null,
       priceText: menu?.priceText ?? null,
       serviceDate,
       source: menu?.source ?? null,
+      stale: stateByDate.get(serviceDate)?.stale ?? false,
       status: menu?.status ?? "missing",
       structuredMenu: menu?.structuredMenu ?? null,
       text: menu?.text ?? null,

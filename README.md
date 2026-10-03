@@ -10,14 +10,17 @@ The first version is intentionally narrow: no user accounts, personalization, se
 - An admin can add a public HTTPS restaurant page that is missing from Lounaspaikka. Its menu must be present in the static page text; PDF menus and browser-rendered pages are not supported. The page is extracted into the same dated menu structure and refreshed with the normal daily run.
 - Custom-page fetches have a 15-second total deadline, including DNS, redirects, and response reading. An unchanged page can reuse an earlier extraction covering all requested dates, even after a refresh for fewer dates; source, content, model, and prompt versions must match.
 - Identical menus create a new freshness observation, not a duplicate revision. Changed menus remain available as immutable history.
+- Failed updates keep the last successful menu. Daily menus and restaurant weeks identify the affected source/date, the failed attempt, and the previous observation; an unsuccessful first fetch is distinct from an unpublished menu.
 - When `OPENAI_API_KEY` is set, it extracts custom menu pages and assesses only unseen menu revisions. The model sees menu facts without restaurant identity and returns four conservatively calibrated 0–10 scores plus one short Finnish recommendation rationale.
 - OpenAI calls have separate hard request budgets for each startup/scheduled refresh and each admin source-add action. Cached custom-page extractions do not consume budget, and setting a budget to zero blocks calls for that operation.
 - Scheduled publication and admin source addition run one at a time within the backend process to avoid assessing the same unseen revision twice. A source-add request can wait for the current publication; reader requests remain available.
 - Ranking is deterministic: appeal 35%, distinctiveness 25%, variety 20%, and value 20%. Assessments without an actual extracted lunch course are excluded; ties are ordered by restaurant ID.
 - The admin can label recent immutable assessments as too high or too low. Labels are stored for shared-profile calibration and never act as hidden restaurant penalties or immediate ranking overrides.
+- In `Lisätyt ravintolat`, `Hae uudelleen` retries an enabled custom source using the same bounded, serialized workflow as adding its URL. It preserves an unrelated source-form draft and reports the result beside that source.
 - The reader UI is Finnish. OpenAI instructions and all code are English; model rationales are Finnish.
 - Readers can search the selected day's full menus by restaurant, town, address, or dish. Search preserves the shared ranking and stays applied when changing dates, visiting a restaurant, and returning. The optional `q` in the page URL also restores search after reload or when sharing the link.
 - `Valitse päivä` jumps directly to a date in the daily list or a restaurant's week. `Kopioi linkki` copies the selected date and search so another reader can open the same view. If clipboard access is unavailable, a selected link field supports manual copying. Links show the latest stored menus for that date, not a frozen snapshot.
+- Restaurant weeks also provide seven direct day buttons. Switching within the loaded week needs no extra API request and keeps the selected date, shared link, and return to recommendations aligned; all other days remain available for comparison below.
 
 ## Run with Docker Compose
 
@@ -88,6 +91,8 @@ npm run dev -w frontend -- --host 127.0.0.1 --strictPort
 ```
 
 Open [the fixture day](http://127.0.0.1:5173/?date=2026-10-03). The fixture has 32 fictional restaurants for 28 September–4 October 2026. At `/admin`, use `local-preview-only-password`. Source URLs ending in `/failure` simulate failed extraction; other URLs add a synthetic menu without fetching the URL. Stop both commands with Ctrl+C; restarting the preview resets its database.
+
+Use `node work/goal-improvement/preview.mjs --planning` for varied daily dishes, an unpublished Sunday, long content, and a custom source with failed updates. Retrying that source from admin succeeds for the currently requested dates, while older failed dates retain their warning. This mode uses the same isolated in-memory database and synthetic adapters.
 
 Run `node work/goal-improvement/benchmark.mjs` after building the backend to repeat the isolated read benchmark. Measurements, verification details, and screenshots are in [the improvement work log](work/goal-improvement/STATE.md).
 

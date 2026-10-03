@@ -100,7 +100,13 @@ export interface DayResponse {
   generatedAt: string | null;
   lastAttemptAt: string | null;
   lastSuccessfulFetchAt: string | null;
-  menus: Array<{ fetchedAt: string; menu: Menu; restaurant: Restaurant }>;
+  menus: Array<{
+    fetchedAt: string;
+    lastAttemptAt?: string | null;
+    stale?: boolean;
+    menu: Menu;
+    restaurant: Restaurant;
+  }>;
   recommendations: Array<{
     menu: Menu;
     rank: number;
@@ -123,10 +129,12 @@ export interface DayResponse {
 export interface RestaurantWeekResponse {
   days: Array<{
     fetchedAt: string | null;
+    lastAttemptAt?: string | null;
     lunchHours: string | null;
     priceText?: string | null;
     serviceDate: string;
     source?: SourceAttribution | null;
+    stale?: boolean;
     status: string;
     structuredMenu: StructuredMenu | null;
     text: string | null;

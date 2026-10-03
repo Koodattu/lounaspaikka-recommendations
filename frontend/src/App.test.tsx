@@ -134,6 +134,98 @@ describe("reader app", () => {
     vi.restoreAllMocks();
   });
 
+  it("marks only the affected daily menu with its failed update and source recovery link", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      ...dayResponse, stale: true,
+      menus: dayResponse.menus.map((entry, index) => ({
+        ...entry, stale: index === 2, lastAttemptAt: "2026-07-14T06:00:00.000Z",
+      })),
+    })));
+    render(<App />);
+    await screen.findByRole("searchbox");
+    const affected = screen.getByRole("heading", { name: "Muu lounaspaikka" }).closest("article")!;
+    expect(within(affected).getByText(/Päivitys epäonnistui/)).toBeTruthy();
+    expect(within(affected).getByText(/14.7. klo 09.00/)).toBeTruthy();
+    expect(within(affected).getByRole("link", { name: /Tarkista lähdesivu/ }).getAttribute("href"))
+      .toBe("https://example.com/muu/menu");
+    expect(within(affected).getByText("Lihapullat ja perunamuusi")).toBeTruthy();
+    const healthy = screen.getByRole("heading", { name: "Vinola" }).closest("article")!;
+    expect(within(healthy).queryByText(/Päivitys epäonnistui/)).toBeNull();
+  });
+
+  it.each([true, false])("explains a failed restaurant-week update with prior menu=%s", async (hasPriorMenu) => {
+    window.history.replaceState({}, "", "/ravintolat/vinola?date=2026-07-14");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      restaurant: { ...restaurant, description: null, openingHours: [] },
+      source: dayResponse.source, weekStart: "2026-07-13", weekEnd: "2026-07-19",
+      days: Array.from({ length: 7 }, (_, i) => ({
+        serviceDate: `2026-07-${13 + i}`, status: "missing", text: null, structuredMenu: null,
+        fetchedAt: null, stale: false, lastAttemptAt: null,
+        ...(i === 1 ? {
+          ...(hasPriorMenu ? { ...menu, fetchedAt: "2026-07-14T03:10:00.000Z" } : {}),
+          stale: true, lastAttemptAt: "2026-07-14T06:00:00.000Z",
+        } : {}),
+      })),
+    })));
+    render(<App />);
+    await screen.findByRole("heading", { name: "Vinola" });
+    const warning = screen.getByRole("complementary", { name: "Ruokalistan päivitys" });
+    expect(within(warning).getByText("Päivitys epäonnistui.")).toBeTruthy();
+    expect(within(warning).getByRole("link", { name: /Tarkista lähdesivu/ }).getAttribute("href"))
+      .toBe(dayResponse.source.url);
+    if (hasPriorMenu) {
+      expect(within(warning).getByText(/Näytämme aiemmat tiedot: 14.7. klo 06.10/)).toBeTruthy();
+      expect(screen.getByText("Paahdettua kuhaa")).toBeTruthy();
+    } else {
+      expect(within(warning).getByText(/ei ole aiemmin haettuja tietoja/)).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Viikon tietoja puuttuu." })).toBeTruthy();
+      expect(screen.getAllByRole("status").map((element) => element.textContent).join(" "))
+        .toContain("Viikon tietoja puuttuu päivitysvirheen vuoksi.");
+      expect(screen.queryByText("Tietoja ei ole vielä haettu tälle päivälle.")).toBeNull();
+    }
+  });
+
+  it("switches between loaded week days without fetching and keeps selection, history and shared links aligned", async () => {
+    window.history.replaceState({}, "", "/ravintolat/vinola?date=2026-07-14&q=kuhaa");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+      restaurant: { ...restaurant, description: null, openingHours: [] },
+      source: dayResponse.source, weekStart: "2026-07-13", weekEnd: "2026-07-19",
+      days: Array.from({ length: 7 }, (_, i) => ({
+        ...menu, serviceDate: `2026-07-${13 + i}`, fetchedAt: "2026-07-14T03:10:00.000Z",
+        ...(i === 6 ? { status: "not_published", text: null, structuredMenu: null } : {}),
+      })),
+    })));
+    const copy = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText: copy } });
+    const view = render(<App />);
+    await screen.findByRole("heading", { name: "Vinola" });
+    const dates = screen.getByRole("navigation", { name: "Viikon päivät" });
+    expect(within(dates).getAllByRole("button")).toHaveLength(7);
+    const sunday = within(dates).getByRole("button", { name: "Sunnuntai 19. heinäkuuta" });
+    fireEvent.click(sunday);
+    expect(sunday.getAttribute("aria-pressed")).toBe("true");
+    const selected = screen.getByRole("heading", { name: "Sunnuntai 19. heinäkuuta" }).closest("article")!;
+    expect(within(selected).getByText("Ruokalistaa ei ole julkaistu.")).toBeTruthy();
+    expect(window.location.search).toBe("?week=2026-07-13&date=2026-07-19&q=kuhaa");
+    expect(screen.getByRole("link", { name: "Sunnuntai 19. heinäkuuta · suosituksiin" }).getAttribute("href"))
+      .toBe("/?date=2026-07-19&q=kuhaa");
+    fireEvent.click(screen.getByRole("button", { name: "Kopioi linkki" }));
+    await screen.findByText("Linkki kopioitu.");
+    expect(copy).toHaveBeenCalledWith(`${window.location.origin}/ravintolat/vinola?week=2026-07-13&date=2026-07-19&q=kuhaa`);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    window.history.replaceState({}, "", "/ravintolat/vinola?date=2026-07-14&q=kuhaa");
+    await act(async () => window.dispatchEvent(new PopStateEvent("popstate")));
+    expect(within(dates).getByRole("button", { name: "Tiistai 14. heinäkuuta" }).getAttribute("aria-pressed"))
+      .toBe("true");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    view.unmount();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Tiistai 14. heinäkuuta" });
+    expect(screen.getByRole("button", { name: "Tiistai 14. heinäkuuta" }).getAttribute("aria-pressed"))
+      .toBe("true");
+  });
+
   it("jumps directly to a chosen date with one request and preserves the menu search", async () => {
     window.history.replaceState({}, "", "/?date=2026-07-14&q=curry");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>

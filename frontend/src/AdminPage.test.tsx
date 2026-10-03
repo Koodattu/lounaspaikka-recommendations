@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminPage } from "./AdminPage";
@@ -22,6 +22,68 @@ function json(payload: unknown, status = 200) {
 
 describe("admin recovery", () => {
   beforeEach(() => vi.restoreAllMocks());
+
+  it("retries a source in place without duplicate requests or losing an unrelated draft", async () => {
+    const failedSource = {
+      createdAt: overview.generatedAt, enabled: true, id: 1,
+      lastError: "Synthetic failure", lastOutcome: "network_error",
+      lastRunAt: overview.generatedAt, restaurantName: "Lounastupa", url: "https://example.com/existing",
+    };
+    let finish!: (response: Response) => void;
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json({ ...overview, sources: [failedSource, { ...failedSource, id: 2, enabled: false, restaurantName: "Poistettu käytöstä" }] }))
+      .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    render(<AdminPage />);
+    const draft = await screen.findByLabelText("Ravintolan ruokalistasivu") as HTMLInputElement;
+    fireEvent.change(draft, { target: { value: "https://example.com/new-draft" } });
+    const retry = screen.getByRole("button", { name: "Hae uudelleen: Lounastupa" }) as HTMLButtonElement;
+    fireEvent.click(retry);
+    expect(retry.disabled).toBe(true);
+    fireEvent.click(retry);
+    expect(screen.queryByRole("button", { name: "Hae uudelleen: Poistettu käytöstä" })).toBeNull();
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/admin/sources")).toHaveLength(1);
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({ url: "https://example.com/existing" });
+    await act(async () => finish(json({ status: "ok" })));
+    expect(await screen.findByText("Ruokalista haettiin uudelleen.")).toBeTruthy();
+    expect(draft.value).toBe("https://example.com/new-draft");
+    expect(retry.disabled).toBe(false);
+    const sourceRow = retry.closest("li")!;
+    expect(within(sourceRow).queryByText("Verkkoyhteys epäonnistui")).toBeNull();
+    expect(within(sourceRow).getByText("Onnistui")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Näytetään aiemmin ladatut tiedot");
+  });
+
+  it.each([422, 401])("preserves the source draft when a retry returns %s", async (status) => {
+    const failedOverview = { ...overview, sources: [{
+      createdAt: overview.generatedAt, enabled: true, id: 1,
+      lastError: "Synthetic extraction failure", lastOutcome: "extraction_error",
+      lastRunAt: overview.generatedAt, restaurantName: "Lounastupa", url: "https://example.com/existing",
+    }] };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(failedOverview))
+      .mockResolvedValueOnce(json({ error: { message: "Lähteen käsittely epäonnistui." } }, status));
+    if (status === 401) fetchMock.mockResolvedValueOnce(json({ status: "ok" }));
+    fetchMock.mockResolvedValueOnce(json(failedOverview));
+    render(<AdminPage />);
+    fireEvent.change(await screen.findByLabelText("Ravintolan ruokalistasivu"), {
+      target: { value: "https://example.com/new-draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Hae uudelleen: Lounastupa" }));
+    if (status === 401) {
+      fireEvent.change(await screen.findByLabelText("Salasana"), { target: { value: "test-only-password" } });
+      expect(screen.getByRole("alert").textContent).toContain("Istunto vanheni");
+      fireEvent.click(screen.getByRole("button", { name: /^Kirjaudu$/ }));
+    } else {
+      expect((await screen.findByRole("alert")).textContent).toContain("Lähteen käsittely epäonnistui");
+    }
+    const retry = await screen.findByRole("button", { name: "Hae uudelleen: Lounastupa" }) as HTMLButtonElement;
+    await waitFor(() => expect(retry.disabled).toBe(false));
+    expect((screen.getByLabelText("Ravintolan ruokalistasivu") as HTMLInputElement).value)
+      .toBe("https://example.com/new-draft");
+    expect(screen.getByText("Poiminta epäonnistui")).toBeTruthy();
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/admin/sources")).toHaveLength(1);
+  });
 
   it("keeps a source draft through session expiry and sign-in, then clears it on explicit logout", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")

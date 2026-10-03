@@ -16,6 +16,7 @@ import {
   dayHref,
   dayRouteDate,
   menuSearchQuery,
+  menuTargetId,
   restaurantHref,
   restaurantRouteState,
   restaurantWeekHref,
@@ -458,7 +459,7 @@ function DailyMenuList({
                         <span aria-hidden="true">{recommendation.rank}</span>
                       </span>
                     )}
-                    <h3>
+                    <h3 id={menuTargetId(entry.restaurant.id)} tabIndex={-1}>
                       <a href={restaurantHref(entry.restaurant.id, data.serviceDate, query)}>
                         {entry.restaurant.name}
                       </a>
@@ -565,6 +566,19 @@ function DayPage({ browser }: { browser: BrowserAdapter }) {
     };
     return browser.subscribePopState(syncDate);
   }, [browser]);
+
+  useEffect(() => {
+    if (!data) return;
+    let targetId: string;
+    try {
+      targetId = decodeURIComponent((browser.location().hash ?? "").slice(1));
+    } catch {
+      return;
+    }
+    if (data.menus.some(({ restaurant }) => menuTargetId(restaurant.id) === targetId)) {
+      document.getElementById(targetId)?.focus();
+    }
+  }, [browser, data]);
 
   function changeDate(nextDate: string) {
     browser.push(dayHref(nextDate, query));
@@ -785,7 +799,7 @@ function RestaurantPage({
         <p className="visually-hidden" role="status" aria-atomic="true">
           {loadedWeekAnnouncement}
         </p>
-        <a className="back-link" href={dayHref(returnDate, query)}>
+        <a className="back-link" href={dayHref(returnDate, query, restaurantId)}>
           <span aria-hidden="true">←</span>
           <span>{formatLongDate(returnDate)} · suosituksiin</span>
         </a>

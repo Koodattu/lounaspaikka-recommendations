@@ -718,8 +718,13 @@ h3 {
   font-weight: 760;
 }
 
+.admin-header {
+  flex-wrap: wrap;
+}
+
 .admin-main {
   padding: 44px 0 80px;
+  overflow-wrap: anywhere;
 }
 
 .admin-login-main {
@@ -855,6 +860,12 @@ h3 {
   font-weight: 780;
   letter-spacing: -0.03em;
   line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.admin-hero > div {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .admin-hero p {
@@ -863,6 +874,7 @@ h3 {
 
 .admin-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -1049,15 +1061,13 @@ h3 {
 }
 
 .admin-calibration-toolbar {
-  display: grid;
-  grid-template-columns: auto auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 5px 9px;
   align-items: center;
-  justify-items: end;
 }
 
-.admin-calibration-toolbar label,
-.admin-calibration-toolbar span {
+.admin-calibration-toolbar label {
   color: var(--muted);
   font-size: 0.875rem;
 }
@@ -1106,10 +1116,6 @@ h3 {
   border-color: var(--signal-clay-hover);
   outline: 3px solid var(--signal-clay-hover);
   outline-offset: 3px;
-}
-
-.admin-calibration-toolbar > span {
-  grid-column: 1 / -1;
 }
 
 .admin-assessment-list {
@@ -1229,12 +1235,13 @@ h3 {
 }
 
 .admin-feedback-control > div {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .admin-feedback-button {
+  flex: 1 1 auto;
   min-height: 46px;
   padding: 9px 12px;
   border: 1px solid var(--line);
@@ -2556,6 +2563,11 @@ body {
   margin-bottom: 12px;
 }
 
+.admin-feedback-control .form-message {
+  max-inline-size: 32ch;
+  overflow-wrap: anywhere;
+}
+
 .week-days button {
   display: grid;
   flex: 1 0 calc((100% - 12px) / 7);
@@ -3121,6 +3133,7 @@ body {
 
 .menu-search .button {
   flex: none;
+  max-width: 100%;
   margin: 0;
 }
 
@@ -3231,6 +3244,11 @@ body {
   color: inherit;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+}
+
+.daily-menu-title-line h3:focus {
+  outline: 2px solid var(--signal-clay-hover);
+  outline-offset: 4px;
 }
 
 .rank-marker {

@@ -97,6 +97,13 @@ export interface CustomSourceService {
   crawlAll(serviceDates: string[], budget?: OpenAiRequestBudget): Promise<void>;
 }
 
+export class SourceDisabledError extends Error {
+  constructor() {
+    super("Custom source is disabled");
+    this.name = "SourceDisabledError";
+  }
+}
+
 class CustomSourceError extends Error {
   constructor(
     message: string,
@@ -218,10 +225,11 @@ function ensureSource(db: Database.Database, url: string, createdAt: string): Cu
     `INSERT OR IGNORE INTO custom_sources (url, enabled, created_at)
      VALUES (?, 1, ?)`,
   ).run(url, createdAt);
-  const source = db.prepare("SELECT id, url FROM custom_sources WHERE url = ?").get(url) as
-    | CustomSourceRow
+  const source = db.prepare("SELECT id, url, enabled FROM custom_sources WHERE url = ?").get(url) as
+    | (CustomSourceRow & { enabled: number })
     | undefined;
   if (!source) throw new Error("Custom source was not persisted");
+  if (!source.enabled) throw new SourceDisabledError();
   return source;
 }
 

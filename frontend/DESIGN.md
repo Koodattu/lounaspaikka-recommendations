@@ -252,6 +252,7 @@ Components feel aligned, compact, and touchable. They reuse a small vocabulary a
 - **Style:** a quiet header with the local mark, a full-width divider, and no decorative navigation. The date navigator is the primary wayfinding control: one aligned row, 46px arrow targets, a sentence-case context label, and a tabular date.
 - **Mobile treatment:** the date navigator spans the content width and precedes the decision headline, establishing date context before the recommendation; secondary catchment metadata may collapse, but the date and next/previous actions never do.
 - **Within a restaurant week:** seven named day buttons precede the selected menu. Route Green, an underline, and `aria-pressed` identify the selection. Buttons wrap at narrow widths or enlarged text; the other full menus remain below for comparison.
+- **Return from detail:** the dated return link restores the corresponding visible restaurant heading after the list loads. Its focus outline and native scrolling preserve comparison position without moving focus on ordinary entry or search changes.
 
 ### Recommendation Wayfinder
 
@@ -266,6 +267,10 @@ The first recommendation's rationale uses solid Route Green with Light on Dark t
 Automatically extracted dietary markers never stand alone. An always-visible sentence tells readers to verify allergens with the restaurant, while a native disclosure contains the longer explanation. Loading and successful date/week changes are announced through stable polite status regions, and an empty week always provides a recovery path.
 
 Failed-update notices sit beside the affected menu, using the Warning Pair and explicit text. They distinguish the failed attempt from the retained observation, or explain that no previous data exists, and offer a source link. Admin source retries report progress and results in the same source row while retaining unrelated form input.
+
+Calibration search and date belong to the URL; search counts sit beside the field and filtering preserves the original assessment order. Save feedback belongs beside its buttons. Busy controls prevent duplicate mutations, restore focus after saving unless the user moved elsewhere, and show only server-confirmed state. Controls and headings wrap with enlarged text.
+
+Source disabling is reversible and retains history. Explain the effect before the action, label disabled rows with text, and keep enable/retry actions in the same row. Historical errors remain available without driving active-source health warnings.
 
 ## 6. Do's and Don'ts
 

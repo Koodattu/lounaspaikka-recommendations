@@ -137,6 +137,7 @@ function AdminDashboard({
   onLogout,
   onRefresh,
   onSessionExpired,
+  onSourceEnabled,
   onSourceFetched,
   onSourceUrlChange,
   sourceUrl,
@@ -147,15 +148,17 @@ function AdminDashboard({
   onLogout: () => Promise<void>;
   onRefresh: () => Promise<void>;
   onSessionExpired: () => void;
+  onSourceEnabled: (sourceId: number, enabled: boolean) => void;
   onSourceFetched: (sourceId: number) => void;
   onSourceUrlChange: (url: string) => void;
   sourceUrl: string;
 }) {
   const [sourceAction, setSourceAction] = useState<number | "new" | null>(null);
-  const [retryResult, setRetryResult] = useState<{ sourceId: number; error: boolean; message: string } | null>(null);
+  const [changingSourceId, setChangingSourceId] = useState<number | null>(null);
+  const actionControl = useRef<HTMLButtonElement | null>(null);
+  const [sourceResult, setSourceResult] = useState<{ sourceId: number; error: boolean; message: string } | null>(null);
   const adding = sourceAction === "new";
-  const [feedbackError, setFeedbackError] = useState<string | null>(null);
-  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [feedbackResult, setFeedbackResult] = useState<{ assessmentId: number; error: boolean; message: string } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [savingAssessmentId, setSavingAssessmentId] = useState<number | null>(null);
@@ -168,11 +171,24 @@ function AdminDashboard({
   const defaultAssessmentDate = assessmentDates.includes(today)
     ? today
     : assessmentDates[0] ?? "";
-  const [selectedAssessmentDate, setSelectedAssessmentDate] = useState(defaultAssessmentDate);
-  const visibleAssessments = data.recentAssessments.filter(
+  const [requestedAssessmentDate, setRequestedAssessmentDate] = useState(
+    () => new URLSearchParams(window.location.search).get("date") ?? "",
+  );
+  const [assessmentQuery, setAssessmentQuery] = useState(
+    () => new URLSearchParams(window.location.search).get("q") ?? "",
+  );
+  const assessmentSearch = useRef<HTMLInputElement>(null);
+  const selectedAssessmentDate = assessmentDates.includes(requestedAssessmentDate)
+    ? requestedAssessmentDate : defaultAssessmentDate;
+  const dayAssessments = data.recentAssessments.filter(
     (assessment) => assessment.serviceDate === selectedAssessmentDate,
   );
-  const busy = sourceAction !== null || loggingOut || refreshing || savingAssessmentId !== null;
+  const searchTerms = assessmentQuery.trim().toLocaleLowerCase("fi-FI").split(/\s+/).filter(Boolean);
+  const visibleAssessments = dayAssessments.filter((assessment) => {
+    const text = `${assessment.restaurantName} ${assessment.menuText ?? ""}`.toLocaleLowerCase("fi-FI");
+    return searchTerms.every((term) => text.includes(term));
+  });
+  const busy = sourceAction !== null || changingSourceId !== null || loggingOut || refreshing || savingAssessmentId !== null;
   const needsAttention = Boolean(
     data.refresh.lastError
     || data.sources.some((source) => source.enabled && source.lastError)
@@ -180,23 +196,46 @@ function AdminDashboard({
   );
 
   useEffect(() => {
-    if (!assessmentDates.includes(selectedAssessmentDate)) {
-      setSelectedAssessmentDate(defaultAssessmentDate);
-    }
-  }, [data.recentAssessments, defaultAssessmentDate, selectedAssessmentDate]);
+    const url = new URL(window.location.href);
+    if (selectedAssessmentDate) url.searchParams.set("date", selectedAssessmentDate);
+    else url.searchParams.delete("date");
+    if (assessmentQuery) url.searchParams.set("q", assessmentQuery);
+    else url.searchParams.delete("q");
+    window.history.replaceState(window.history.state, "", url);
+  }, [selectedAssessmentDate, requestedAssessmentDate, assessmentQuery]);
+
+  useEffect(() => {
+    const syncReview = () => {
+      const params = new URLSearchParams(window.location.search);
+      setRequestedAssessmentDate(params.get("date") ?? "");
+      setAssessmentQuery(params.get("q") ?? "");
+      setFeedbackResult(null);
+    };
+    window.addEventListener("popstate", syncReview);
+    return () => window.removeEventListener("popstate", syncReview);
+  }, []);
+
+  useEffect(() => {
+    if (sourceAction !== null || changingSourceId !== null || savingAssessmentId !== null || !actionControl.current) return;
+    // Browsers can blur a focused button while it is disabled during a save.
+    // Restore it only if the user has not moved focus elsewhere meanwhile.
+    if (document.activeElement === document.body) actionControl.current.focus();
+    actionControl.current = null;
+  }, [sourceAction, changingSourceId, savingAssessmentId]);
 
   async function addSource(event: FormEvent) {
     event.preventDefault();
     await fetchSource(sourceUrl);
   }
 
-  async function fetchSource(url: string, sourceId?: number) {
+  async function fetchSource(url: string, sourceId?: number, control?: HTMLButtonElement) {
+    actionControl.current = control ?? null;
     setSourceAction(sourceId ?? "new");
     if (sourceId === undefined) {
       setSourceError(null);
       setSourceMessage(null);
     } else {
-      setRetryResult(null);
+      setSourceResult(null);
     }
     try {
       await adminRequest("/api/admin/sources", {
@@ -209,7 +248,7 @@ function AdminDashboard({
         setSourceMessage("Lähde lisättiin ja ruokalista haettiin.");
       } else {
         onSourceFetched(sourceId);
-        setRetryResult({ sourceId, error: false, message: "Ruokalista haettiin uudelleen." });
+        setSourceResult({ sourceId, error: false, message: "Ruokalista haettiin uudelleen." });
       }
       await onRefresh();
     } catch (error) {
@@ -219,7 +258,7 @@ function AdminDashboard({
       }
       const message = error instanceof Error ? error.message : "Ruokalistan haku epäonnistui.";
       if (sourceId === undefined) setSourceError(message);
-      else setRetryResult({ sourceId, error: true, message });
+      else setSourceResult({ sourceId, error: true, message });
       if (error instanceof AdminRequestError && error.status === 422) {
         await onRefresh();
       }
@@ -228,14 +267,48 @@ function AdminDashboard({
     }
   }
 
+  async function setSourceEnabled(source: AdminOverview["sources"][number], control: HTMLButtonElement) {
+    actionControl.current = control;
+    setChangingSourceId(source.id);
+    setSourceResult(null);
+    try {
+      const result = await adminRequest<{ sourceId: number; enabled: boolean }>(`/api/admin/sources/${source.id}`, {
+        body: JSON.stringify({ enabled: !source.enabled }),
+        headers: { "content-type": "application/json" },
+        method: "PATCH",
+      });
+      onSourceEnabled(result.sourceId, result.enabled);
+      setSourceResult({
+        sourceId: source.id,
+        error: false,
+        message: result.enabled
+          ? "Lähde otettiin käyttöön. Voit hakea ruokalistan nyt tai odottaa seuraavaa keräystä."
+          : "Lähde poistettiin käytöstä. Sen ruokalistoja ei näytetä lounaslistalla eikä sivua haeta automaattisesti.",
+      });
+      await onRefresh();
+    } catch (error) {
+      if (error instanceof AdminRequestError && error.status === 401) {
+        onSessionExpired();
+        return;
+      }
+      setSourceResult({
+        sourceId: source.id, error: true,
+        message: error instanceof Error ? error.message : "Lähteen tilaa ei saatu tallennettua.",
+      });
+    } finally {
+      setChangingSourceId(null);
+    }
+  }
+
   async function saveAssessmentFeedback(
     assessmentId: number,
     direction: "higher" | "lower" | null,
     restaurantName: string,
+    control: HTMLButtonElement,
   ) {
+    actionControl.current = control;
     setSavingAssessmentId(assessmentId);
-    setFeedbackError(null);
-    setFeedbackMessage(null);
+    setFeedbackResult(null);
     try {
       await adminRequest(`/api/admin/assessments/${assessmentId}/feedback`, {
         body: JSON.stringify({ direction }),
@@ -243,18 +316,24 @@ function AdminDashboard({
         method: "PUT",
       });
       onFeedbackSaved(assessmentId, direction);
-      setFeedbackMessage(
-        direction
+      setFeedbackResult({
+        assessmentId,
+        error: false,
+        message: direction
           ? `Palaute tallennettiin: ${restaurantName}.`
           : `Palaute poistettiin: ${restaurantName}.`,
-      );
+      });
       await onRefresh();
     } catch (error) {
       if (error instanceof AdminRequestError && error.status === 401) {
         onSessionExpired();
         return;
       }
-      setFeedbackError(error instanceof Error ? error.message : "Palautetta ei saatu tallennettua.");
+      setFeedbackResult({
+        assessmentId,
+        error: true,
+        message: error instanceof Error ? error.message : "Palautetta ei saatu tallennettua.",
+      });
     } finally {
       setSavingAssessmentId(null);
     }
@@ -354,9 +433,8 @@ function AdminDashboard({
               disabled={assessmentDates.length === 0 || savingAssessmentId !== null}
               id="assessment-date"
               onChange={(event) => {
-                setSelectedAssessmentDate(event.target.value);
-                setFeedbackMessage(null);
-                setFeedbackError(null);
+                setRequestedAssessmentDate(event.target.value);
+                setFeedbackResult(null);
               }}
               value={selectedAssessmentDate}
             >
@@ -365,18 +443,11 @@ function AdminDashboard({
                 <option key={serviceDate} value={serviceDate}>{formatShortDate(serviceDate)}</option>
               ))}
             </select>
-            <span>
-              {visibleAssessments.length === 1
-                ? "1 arvio"
-                : `${visibleAssessments.length} arviota`}
-            </span>
           </div>
         </div>
         <p className="admin-calibration-intro">
-          Valitse päivä ja merkitse, ovatko kokonaispisteet mielestäsi liian korkeat vai
-          liian matalat. Palaute tallentuu arviointiohjeen seuraavaa kalibrointia varten
-          eikä muuta julkaistua top 3:a heti. Poista valinta painamalla samaa palautetta
-          uudelleen.
+          Palaute tallentuu seuraavaa kalibrointia varten eikä muuta julkaistua top 3:a.
+          Poista palaute painamalla samaa valintaa uudelleen.
         </p>
         <details className="admin-score-help">
           <summary>Mitä osa-alueet tarkoittavat?</summary>
@@ -387,12 +458,41 @@ function AdminDashboard({
             <div><dt>Hinta–laatu</dt><dd>Mitä ilmoitetulla hinnalla saa.</dd></div>
           </dl>
         </details>
-        {feedbackError && <p className="admin-inline-error" role="alert">{feedbackError}</p>}
-        {feedbackMessage && <p className="form-message form-message-ok" role="status">{feedbackMessage}</p>}
+        <div className="menu-search" role="search" aria-label="Arvioiden haku">
+          <label htmlFor="assessment-search">Hae arviota</label>
+          <div className="menu-search-controls">
+            <input
+              aria-controls="assessment-results"
+              autoComplete="off"
+              disabled={savingAssessmentId !== null}
+              id="assessment-search"
+              onChange={(event) => setAssessmentQuery(event.target.value)}
+              placeholder="Ravintola tai ruoka"
+              ref={assessmentSearch}
+              type="search"
+              value={assessmentQuery}
+            />
+            {assessmentQuery && (
+              <button className="button" disabled={savingAssessmentId !== null} type="button" onClick={() => {
+                setAssessmentQuery("");
+                assessmentSearch.current?.focus();
+              }}>
+                Tyhjennä arviohaku
+              </button>
+            )}
+          </div>
+          <span className="muted" aria-live="polite" aria-atomic="true">
+            {searchTerms.length > 0
+              ? `${visibleAssessments.length} / ${dayAssessments.length} arviota`
+              : visibleAssessments.length === 1 ? "1 arvio" : `${visibleAssessments.length} arviota`}
+          </span>
+        </div>
         {visibleAssessments.length === 0 ? (
-          <p className="admin-empty">Aktiivisen arviointiversion arvioita ei ole vielä.</p>
+          <p className="admin-empty" id="assessment-results">{dayAssessments.length > 0
+            ? "Haulla ei löytynyt arvioita. Kokeile toista hakusanaa tai tyhjennä haku."
+            : "Aktiivisen arviointiversion arvioita ei ole vielä."}</p>
         ) : (
-          <ul className="admin-assessment-list">
+          <ul className="admin-assessment-list" id="assessment-results">
             {visibleAssessments.map((assessment) => {
               const saving = savingAssessmentId === assessment.assessmentId;
               return (
@@ -433,10 +533,11 @@ function AdminDashboard({
                         className="admin-feedback-button"
                         data-direction="lower"
                         disabled={busy}
-                        onClick={() => void saveAssessmentFeedback(
+                        onClick={(event) => void saveAssessmentFeedback(
                           assessment.assessmentId,
                           assessment.feedbackDirection === "lower" ? null : "lower",
                           assessment.restaurantName,
+                          event.currentTarget,
                         )}
                         type="button"
                       >
@@ -448,10 +549,11 @@ function AdminDashboard({
                         className="admin-feedback-button"
                         data-direction="higher"
                         disabled={busy}
-                        onClick={() => void saveAssessmentFeedback(
+                        onClick={(event) => void saveAssessmentFeedback(
                           assessment.assessmentId,
                           assessment.feedbackDirection === "higher" ? null : "higher",
                           assessment.restaurantName,
+                          event.currentTarget,
                         )}
                         type="button"
                       >
@@ -459,6 +561,14 @@ function AdminDashboard({
                         Liian matala
                       </button>
                     </div>
+                    {feedbackResult?.assessmentId === assessment.assessmentId && (
+                      <p
+                        className={`form-message ${feedbackResult.error ? "form-message-error" : "form-message-ok"}`}
+                        role={feedbackResult.error ? "alert" : "status"}
+                      >
+                        {feedbackResult.message}
+                      </p>
+                    )}
                   </div>
                 </li>
               );
@@ -503,6 +613,7 @@ function AdminDashboard({
 
         <section className="admin-panel" aria-labelledby="crawler-title">
           <h2 id="crawler-title">Viimeisin ajo</h2>
+          <p>Hakutiedot koskevat käytössä olevia lähteitä.</p>
           <dl className="admin-detail-list">
             <div><dt>Tila</dt><dd>{data.refresh.running ? "Käynnissä" : data.refresh.lastError ? "Epäonnistui" : data.refresh.lastFinishedAt ? "Valmis" : "Ei vielä ajettu"}</dd></div>
             <div><dt>Kohde</dt><dd>{data.refresh.currentTarget === "finalization" ? "Viimeistely" : data.refresh.currentTarget ?? "–"}</dd></div>
@@ -525,12 +636,13 @@ function AdminDashboard({
           <h2 id="sources-title" tabIndex={-1}>Lisätyt ravintolat</h2>
           <span>{data.sources.length} {data.sources.length === 1 ? "lähde" : "lähdettä"}</span>
         </div>
+        <p>Poista lähde käytöstä, kun sitä ei pidä hakea tai näyttää lounaslistalla. Aiemmat tiedot säilyvät, ja voit ottaa lähteen takaisin käyttöön.</p>
         {data.sources.length === 0 ? (
           <p className="admin-empty">Sivulähteitä ei ole vielä lisätty.</p>
         ) : (
           <ul className="admin-source-list">
             {data.sources.map((source) => (
-              <li key={source.id} aria-busy={sourceAction === source.id}>
+              <li key={source.id} aria-busy={sourceAction === source.id || changingSourceId === source.id}>
                 <div>
                   <strong>{source.restaurantName ?? "Nimeä ei vielä löytynyt"}</strong>
                   <a href={source.url} rel="noreferrer" target="_blank">
@@ -549,18 +661,27 @@ function AdminDashboard({
                       type="button"
                       aria-label={`Hae uudelleen: ${source.restaurantName ?? source.url}`}
                       disabled={busy}
-                      onClick={() => void fetchSource(source.url, source.id)}
+                      onClick={(event) => void fetchSource(source.url, source.id, event.currentTarget)}
                     >
                       {sourceAction === source.id ? "Haetaan…" : "Hae uudelleen"}
                     </button>
                   )}
-                </div>
-                {retryResult?.sourceId === source.id && (
-                  <p
-                    className={`admin-source-result form-message ${retryResult.error ? "form-message-error" : "form-message-ok"}`}
-                    role={retryResult.error ? "alert" : "status"}
+                  <button
+                    className="button admin-secondary-button"
+                    type="button"
+                    aria-label={`${source.enabled ? "Poista käytöstä" : "Ota käyttöön"}: ${source.restaurantName ?? source.url}`}
+                    disabled={busy}
+                    onClick={(event) => void setSourceEnabled(source, event.currentTarget)}
                   >
-                    {retryResult.message}
+                    {changingSourceId === source.id ? "Tallennetaan…" : source.enabled ? "Poista käytöstä" : "Ota käyttöön"}
+                  </button>
+                </div>
+                {sourceResult?.sourceId === source.id && (
+                  <p
+                    className={`admin-source-result form-message ${sourceResult.error ? "form-message-error" : "form-message-ok"}`}
+                    role={sourceResult.error ? "alert" : "status"}
+                  >
+                    {sourceResult.message}
                   </p>
                 )}
                 {source.lastError && (
@@ -589,7 +710,7 @@ function AdminDashboard({
                 <div>
                   <strong>{outcomeLabel(error.outcome)}</strong>
                   <span>{error.sourceUrl
-                    ? "Tarkista lähdesivu ja hae se uudelleen Lisätyt ravintolat -osiosta."
+                    ? "Tarkista lähdesivu ja sen tila Lisätyt ravintolat -osiosta."
                     : "Hakua yritetään uudelleen seuraavassa ajastetussa keräyksessä."}</span>
                   <details className="admin-error-details admin-error-row-details">
                     <summary>Tekniset tiedot</summary>
@@ -709,6 +830,13 @@ export function AdminPage() {
     } : current);
   }
 
+  function sourceEnabled(sourceId: number, enabled: boolean) {
+    setData((current) => current ? {
+      ...current,
+      sources: current.sources.map((source) => source.id === sourceId ? { ...source, enabled } : source),
+    } : current);
+  }
+
   return (
     <>
       <AdminHeader />
@@ -737,6 +865,7 @@ export function AdminPage() {
           onLogout={logout}
           onRefresh={loadOverview}
           onSessionExpired={sessionExpired}
+          onSourceEnabled={sourceEnabled}
           onSourceFetched={sourceFetched}
           onSourceUrlChange={setSourceUrl}
           sourceUrl={sourceUrl}

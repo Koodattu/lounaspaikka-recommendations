@@ -208,7 +208,7 @@ describe("reader app", () => {
     expect(within(selected).getByText("Ruokalistaa ei ole julkaistu.")).toBeTruthy();
     expect(window.location.search).toBe("?week=2026-07-13&date=2026-07-19&q=kuhaa");
     expect(screen.getByRole("link", { name: "Sunnuntai 19. heinäkuuta · suosituksiin" }).getAttribute("href"))
-      .toBe("/?date=2026-07-19&q=kuhaa");
+      .toBe("/?date=2026-07-19&q=kuhaa#menu-vinola");
     fireEvent.click(screen.getByRole("button", { name: "Kopioi linkki" }));
     await screen.findByText("Linkki kopioitu.");
     expect(copy).toHaveBeenCalledWith(`${window.location.origin}/ravintolat/vinola?week=2026-07-13&date=2026-07-19&q=kuhaa`);
@@ -271,7 +271,7 @@ describe("reader app", () => {
     expect(fetchMock.mock.lastCall?.[0]).toBe("/api/restaurants/vinola/weeks/2026-08-03");
     expect(window.location.search).toBe("?week=2026-08-03&date=2026-08-04&q=kuhaa");
     expect(screen.getByRole("link", { name: "Tiistai 4. elokuuta · suosituksiin" }).getAttribute("href"))
-      .toBe("/?date=2026-08-04&q=kuhaa");
+      .toBe("/?date=2026-08-04&q=kuhaa#menu-vinola");
   });
 
   it("copies the selected day and search and clears copy confirmation when the view changes", async () => {
@@ -441,9 +441,11 @@ describe("reader app", () => {
     render(<App />);
     expect((await screen.findByRole("searchbox") as HTMLInputElement).value).toBe("Seinäjoki kuhaa");
     expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Vinola", level: 3 }));
     fireEvent.click(screen.getByRole("button", { name: "Tyhjennä haku" }));
     expect(new URLSearchParams(window.location.search).has("q")).toBe(false);
     expect(screen.getAllByRole("article")).toHaveLength(3);
+    expect(document.activeElement).toBe(screen.getByRole("searchbox"));
 
     await act(async () => {
       window.history.replaceState({}, "", "/?date=2026-07-14&q=curry");
@@ -697,7 +699,7 @@ describe("reader app", () => {
     const selectedDayHeading = screen.getByRole("heading", { name: "Tiistai 14. heinäkuuta" });
     expect(selectedDayHeading).toBeTruthy();
     expect(screen.getByRole("link", { name: "Tiistai 14. heinäkuuta · suosituksiin" }).getAttribute("href"))
-      .toBe("/?date=2026-07-14");
+      .toBe("/?date=2026-07-14#menu-vinola");
     expect(screen.getAllByText("Paahdettua kuhaa").length).toBeGreaterThan(0);
     expect(screen.getByText("13,70 €")).toBeTruthy();
     expect(screen.getByText("L")).toBeTruthy();
@@ -823,15 +825,38 @@ describe("reader app", () => {
     fireEvent.click(screen.getByRole("button", { name: "Seuraava viikko" }));
     expect(screen.getByText("Ravintolan ruokalistaa ladataan…")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Tiistai 21. heinäkuuta · suosituksiin" }).getAttribute("href"))
-      .toBe("/?date=2026-07-21");
+      .toBe("/?date=2026-07-21#menu-vinola");
     expect(screen.queryByRole("heading", { name: "Tiistai 14. heinäkuuta" })).toBeNull();
 
     await act(async () => rejectWeek(new Error("offline")));
     expect(await screen.findByRole("button", { name: "Yritä uudelleen" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Tiistai 21. heinäkuuta · suosituksiin" }).getAttribute("href"))
-      .toBe("/?date=2026-07-21");
+      .toBe("/?date=2026-07-21#menu-vinola");
     expect(document.title).toBe("Vinola – Tiistai 21. heinäkuuta | Mihin lounaalle?");
   });
+
+  it("restores a custom-source menu target after the daily request completes", async () => {
+    window.history.replaceState({}, "", "/?date=2026-07-14#menu-custom%253A1");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      ...dayResponse,
+      menus: [{ ...dayResponse.menus[0], restaurant: { ...restaurant, id: "custom:1" } }],
+      recommendations: [],
+    })));
+    render(<App />);
+    const target = await screen.findByRole("heading", { name: "Vinola", level: 3 });
+    expect(document.activeElement).toBe(target);
+  });
+
+  it.each(["", "#menu-unknown", "#%E0%A4%A", "#main-content", "#menu-vinola"])(
+    "leaves focus alone when the return fragment has no visible menu: %s",
+    async (hash) => {
+      window.history.replaceState({}, "", `/?date=2026-07-14&q=curry${hash}`);
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(dayResponse)));
+      render(<App />);
+      await screen.findByRole("heading", { name: "Kasvisravintola", level: 3 });
+      expect(document.activeElement).toBe(document.body);
+    },
+  );
 
   it("keeps route context aligned when a selected restaurant day is missing", async () => {
     window.history.replaceState({}, "", "/ravintolat/vinola?week=2026-07-13&date=2026-07-14");
@@ -870,7 +895,7 @@ describe("reader app", () => {
     expect(
       screen.getByRole("link", { name: "Keskiviikko 15. heinäkuuta · suosituksiin" })
         .getAttribute("href"),
-    ).toBe("/?date=2026-07-15");
+    ).toBe("/?date=2026-07-15#menu-vinola");
     expect(screen.getByText("Vinola: Keskiviikko 15. heinäkuuta ladattu.")).toBeTruthy();
   });
 

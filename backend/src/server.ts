@@ -106,6 +106,7 @@ async function start(): Promise<void> {
     },
   });
   const app = createServer({
+    setCustomSourceEnabled: (sourceId, enabled) => publication.setCustomSourceEnabled(sourceId, enabled, datesToRefresh(new Date())),
     addCustomSource: customSourceService
       ? async (url) => {
           const serviceDates = datesToRefresh(new Date());

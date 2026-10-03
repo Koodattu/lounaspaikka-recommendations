@@ -21,7 +21,187 @@ function json(payload: unknown, status = 200) {
 }
 
 describe("admin recovery", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/admin");
+  });
+
+  it("disables and enables a source with confirmed local state, no duplicate save, and an intact draft", async () => {
+    const source = {
+      createdAt: overview.generatedAt, enabled: true, id: 1,
+      lastError: null, lastOutcome: "success", lastRunAt: overview.generatedAt,
+      restaurantName: "Lounastupa", url: "https://example.com/existing",
+    };
+    let finish!: (response: Response) => void;
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json({ ...overview, sources: [source] }))
+      .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(json({ sourceId: 1, enabled: true }))
+      .mockResolvedValueOnce(json({ ...overview, sources: [source] }));
+    render(<AdminPage />);
+    const draft = await screen.findByLabelText("Ravintolan ruokalistasivu") as HTMLInputElement;
+    fireEvent.change(draft, { target: { value: "https://example.com/new-draft" } });
+    const disable = screen.getByRole("button", { name: "Poista käytöstä: Lounastupa" }) as HTMLButtonElement;
+    const row = disable.closest("li")!;
+    fireEvent.click(disable);
+    expect(disable.disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Hae uudelleen: Lounastupa" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(disable);
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "PATCH")).toHaveLength(1);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/admin/sources/1");
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({ enabled: false });
+    await act(async () => finish(json({ sourceId: 1, enabled: false })));
+    expect(within(row).getByText("Ei käytössä")).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: /^Hae uudelleen:/ })).toBeNull();
+    expect((await within(row).findByRole("status")).textContent).toContain("Lähde poistettiin käytöstä");
+    expect(await screen.findByText(/Näytetään aiemmin ladatut tiedot/)).toBeTruthy();
+    expect(draft.value).toBe("https://example.com/new-draft");
+    fireEvent.click(screen.getByRole("button", { name: "Ota käyttöön: Lounastupa" }));
+    expect(await screen.findByRole("button", { name: "Poista käytöstä: Lounastupa" })).toBeTruthy();
+    expect(within(row).queryByText("Ei käytössä")).toBeNull();
+    expect(within(row).getByRole("status").textContent).toContain("Lähde otettiin käyttöön");
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toEqual({ enabled: true });
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/admin/sources")).toBe(false);
+  });
+
+  it.each([500, 401])("preserves source state and draft after a failed state change (%s), without replaying it", async (status) => {
+    const data = { ...overview, sources: [{
+      createdAt: overview.generatedAt, enabled: true, id: 1,
+      lastError: null, lastOutcome: "success", lastRunAt: overview.generatedAt,
+      restaurantName: "Lounastupa", url: "https://example.com/existing",
+    }] };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(data))
+      .mockResolvedValueOnce(json({ error: { message: "Tilaa ei saatu tallennettua." } }, status))
+      .mockResolvedValueOnce(json({ status: "ok" }))
+      .mockResolvedValueOnce(json(data));
+    render(<AdminPage />);
+    fireEvent.change(await screen.findByLabelText("Ravintolan ruokalistasivu"), { target: { value: "https://example.com/draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Poista käytöstä: Lounastupa" }));
+    if (status === 401) {
+      fireEvent.change(await screen.findByLabelText("Salasana"), { target: { value: "test-only-password" } });
+      fireEvent.click(screen.getByRole("button", { name: /^Kirjaudu$/ }));
+    } else {
+      expect((await screen.findByRole("alert")).closest("li")).toBeTruthy();
+    }
+    const disable = await screen.findByRole("button", { name: "Poista käytöstä: Lounastupa" });
+    await waitFor(() => expect((disable as HTMLButtonElement).disabled).toBe(false));
+    expect((screen.getByLabelText("Ravintolan ruokalistasivu") as HTMLInputElement).value).toBe("https://example.com/draft");
+    expect(screen.queryByText("Ei käytössä")).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "PATCH")).toHaveLength(1);
+  });
+
+  it("finds assessments by restaurant and dish while preserving date and search across refresh and reload", async () => {
+    const assessment = {
+      assessedAt: overview.generatedAt, assessmentId: 1, feedbackDirection: null,
+      menuText: "Kasviskeitto", rationale: "Monipuolinen lounas.", restaurantId: "vinola",
+      restaurantName: "Vinola", score: 7, scores: { appeal: 7, distinctiveness: 7, value: 7, variety: 7 },
+      serviceDate: "2026-07-14",
+    };
+    const data = { ...overview, recentAssessments: [
+      assessment,
+      { ...assessment, assessmentId: 2, restaurantName: "Aava", menuText: "Kalakeitto" },
+      { ...assessment, assessmentId: 3, serviceDate: "2026-07-15" },
+    ] };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => json(data));
+    const view = render(<AdminPage />);
+    fireEvent.change(await screen.findByLabelText("Lounaspäivä"), { target: { value: "2026-07-14" } });
+    const search = screen.getByRole("searchbox", { name: "Hae arviota" });
+    fireEvent.change(search, { target: { value: "  VINOLA kasvis  " } });
+    expect(screen.getByText("1 / 2 arviota")).toBeTruthy();
+    expect(screen.getAllByRole("group", { name: /^Oma arvio:/ })).toHaveLength(1);
+    expect(screen.getByRole("group", { name: "Oma arvio: Vinola, 14.7." })).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Päivitä tiedot" }));
+    await waitFor(() => expect((screen.getByRole("button", { name: "Päivitä tiedot" }) as HTMLButtonElement).disabled).toBe(false));
+    expect((search as HTMLInputElement).value).toBe("  VINOLA kasvis  ");
+    view.unmount();
+    render(<AdminPage />);
+    expect((await screen.findByLabelText("Lounaspäivä") as HTMLSelectElement).value).toBe("2026-07-14");
+    const restored = screen.getByRole("searchbox", { name: "Hae arviota" }) as HTMLInputElement;
+    expect(restored.value).toBe("  VINOLA kasvis  ");
+    fireEvent.change(restored, { target: { value: "ei löydy" } });
+    expect(screen.getByText("Haulla ei löytynyt arvioita. Kokeile toista hakusanaa tai tyhjennä haku.")).toBeTruthy();
+    expect(screen.queryByRole("group", { name: /^Oma arvio:/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tyhjennä arviohaku" }));
+    expect(document.activeElement).toBe(restored);
+    expect(screen.getAllByRole("group", { name: /^Oma arvio:/ })).toHaveLength(2);
+    expect(new URLSearchParams(window.location.search).has("q")).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      window.history.replaceState({}, "", "/admin?date=2026-07-15&q=kasvis#calibration-title");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect((screen.getByLabelText("Lounaspäivä") as HTMLSelectElement).value).toBe("2026-07-15");
+    expect(restored.value).toBe("kasvis");
+    expect(screen.getByRole("group", { name: "Oma arvio: Vinola, 15.7." })).toBeTruthy();
+    expect(window.location.hash).toBe("#calibration-title");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      window.history.replaceState({}, "", "/admin?date=invalid&q=kasvis");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(new URLSearchParams(window.location.search).get("date")).toBe("2026-07-15");
+  });
+
+  it("keeps review context after an expired save without duplicate submission or automatic replay", async () => {
+    window.history.replaceState({}, "", "/admin?date=2026-07-14&q=vinola");
+    const assessment = {
+      assessedAt: overview.generatedAt, assessmentId: 1, feedbackDirection: null,
+      menuText: "Kasviskeitto", rationale: "Monipuolinen lounas.", restaurantId: "vinola",
+      restaurantName: "Vinola", score: 7, scores: { appeal: 7, distinctiveness: 7, value: 7, variety: 7 },
+      serviceDate: "2026-07-14",
+    };
+    const data = { ...overview, recentAssessments: [assessment, { ...assessment, assessmentId: 2, serviceDate: "2026-07-15" }] };
+    let finish!: (response: Response) => void;
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(data))
+      .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+      .mockResolvedValueOnce(json({ status: "ok" }))
+      .mockResolvedValueOnce(json(data));
+    render(<AdminPage />);
+    const lower = await screen.findByRole("button", { name: "Liian korkea" });
+    fireEvent.click(lower);
+    expect((lower as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("searchbox", { name: "Hae arviota" }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Lounaspäivä") as HTMLSelectElement).disabled).toBe(true);
+    fireEvent.click(lower);
+    await act(async () => finish(json({}, 401)));
+    fireEvent.change(await screen.findByLabelText("Salasana"), { target: { value: "test-only-password" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Kirjaudu$/ }));
+    expect((await screen.findByLabelText("Lounaspäivä") as HTMLSelectElement).value).toBe("2026-07-14");
+    expect((screen.getByRole("searchbox", { name: "Hae arviota" }) as HTMLInputElement).value).toBe("vinola");
+    expect(screen.getByRole("button", { name: "Liian korkea" }).getAttribute("aria-pressed")).toBe("false");
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "PUT")).toHaveLength(1);
+  });
+
+  it("shows a failed feedback save beside its assessment and allows retry without changing the saved selection", async () => {
+    const assessment = {
+      assessedAt: overview.generatedAt, assessmentId: 1, feedbackDirection: null,
+      menuText: "Kasviskeitto", rationale: "Monipuolinen lounas.", restaurantId: "vinola",
+      restaurantName: "Vinola", score: 7, scores: { appeal: 7, distinctiveness: 7, value: 7, variety: 7 },
+      serviceDate: "2026-07-14",
+    };
+    const data = { ...overview, recentAssessments: [assessment, { ...assessment, assessmentId: 2, restaurantName: "Aava" }] };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(data))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(json({ status: "ok" }))
+      .mockResolvedValueOnce(json({ ...data, recentAssessments: [assessment, { ...data.recentAssessments[1], feedbackDirection: "lower" }] }));
+    render(<AdminPage />);
+    const feedback = await screen.findByRole("group", { name: "Oma arvio: Aava, 14.7." });
+    const row = feedback.closest("li")!;
+    const lower = within(feedback).getByRole("button", { name: "Liian korkea" });
+    fireEvent.click(lower);
+    expect((await within(row).findByRole("alert")).textContent).toContain("Tarkista yhteys");
+    expect(lower.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(lower);
+    expect((await within(row).findByRole("status")).textContent).toBe("Palaute tallennettiin: Aava.");
+    expect(lower.getAttribute("aria-pressed")).toBe("true");
+    expect(within(row).queryByRole("alert")).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === "PUT")).toHaveLength(2);
+  });
 
   it("retries a source in place without duplicate requests or losing an unrelated draft", async () => {
     const failedSource = {

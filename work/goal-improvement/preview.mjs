@@ -1,5 +1,6 @@
 import { createServer } from "../../backend/dist/http-app.js";
 import { createCustomSourceService } from "../../backend/dist/custom-sources.js";
+import { createRecommendationPublication } from "../../backend/dist/recommendation-publication.js";
 import { createFixture } from "./fixture.mjs";
 
 const planning = process.argv.includes("--planning");
@@ -27,9 +28,13 @@ if (planning) {
   await sources.addAndCrawl("https://example.test/failure", ["2026-10-03", "2026-10-04"])
     .catch(() => console.info("Seeded expected synthetic extraction failure."));
 }
+const publication = createRecommendationPublication({
+  db, customSources: sources, assessor: null, versions: {}, adminRequestBudget: 0, refreshRequestBudget: 0,
+});
 const app = createServer({
   db, adminPassword: "local-preview-only-password", openAiConfigured: true,
   addCustomSource: (url) => sources.addAndCrawl(url, ["2026-10-03", "2026-10-04"]),
+  setCustomSourceEnabled: (id, enabled) => publication.setCustomSourceEnabled(id, enabled, ["2026-10-03", "2026-10-04"]),
 });
 await app.listen({ host: "127.0.0.1", port: 3000 });
 console.info("Synthetic preview API: http://127.0.0.1:3000 (in-memory database, no external integrations)");

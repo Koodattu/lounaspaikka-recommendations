@@ -6,6 +6,7 @@ import Fastify, {
 import type Database from "better-sqlite3";
 
 import { createAdminAuth } from "./admin-auth.js";
+import { SourceDisabledError } from "./custom-sources.js";
 import { getAdminOverview } from "./admin-overview.js";
 import { isMonday, parseIsoDate } from "./dates.js";
 import { normalizeMenuPageUrl, PageFetchError } from "./page-fetcher.js";
@@ -20,6 +21,7 @@ import type { RefreshStatus } from "./refresh.js";
 
 interface CreateServerOptions {
   addCustomSource?: (url: string) => Promise<unknown>;
+  setCustomSourceEnabled?: (sourceId: number, enabled: boolean) => Promise<{ sourceId: number; enabled: boolean } | null>;
   adminPassword?: string;
   db: Database.Database;
   openAiConfigured?: boolean;
@@ -130,13 +132,39 @@ export function createServer(options: CreateServerOptions): FastifyInstance {
       try {
         const result = await options.addCustomSource(url);
         return reply.code(201).send(result);
-      } catch {
+      } catch (error) {
+        if (error instanceof SourceDisabledError) {
+          return reply.code(409).send({
+            error: { code: "SOURCE_DISABLED", message: "Lähde on poistettu käytöstä. Ota se käyttöön Lisätyt ravintolat -osiossa." },
+          });
+        }
         return reply.code(422).send({
           error: {
             code: "SOURCE_PROCESSING_FAILED",
             message: "Lähteen käsittely epäonnistui. Tarkista virhe yhteenvedosta.",
           },
         });
+      }
+    },
+  );
+
+  app.patch<{ Body: { enabled?: unknown }; Params: { sourceId: string } }>(
+    "/api/admin/sources/:sourceId",
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      const sourceId = Number(request.params.sourceId);
+      if (!Number.isSafeInteger(sourceId) || sourceId < 1 || typeof request.body?.enabled !== "boolean") {
+        return reply.code(400).send({ error: { code: "INVALID_SOURCE_STATE", message: "Lähde tai sen tila ei kelpaa." } });
+      }
+      if (!options.setCustomSourceEnabled) {
+        return reply.code(503).send({ error: { code: "SOURCE_CONTROLS_DISABLED", message: "Lähteiden hallinta ei ole käytössä." } });
+      }
+      try {
+        const result = await options.setCustomSourceEnabled(sourceId, request.body.enabled);
+        if (!result) return reply.code(404).send({ error: { code: "SOURCE_NOT_FOUND", message: "Lähdettä ei löytynyt." } });
+        return result;
+      } catch {
+        return reply.code(503).send({ error: { code: "SOURCE_UPDATE_FAILED", message: "Lähteen tilaa ei voitu tallentaa. Yritä uudelleen." } });
       }
     },
   );

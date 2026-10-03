@@ -28,6 +28,11 @@ interface RecommendationPublicationOptions {
 }
 
 export interface RecommendationPublication {
+  setCustomSourceEnabled(
+    sourceId: number,
+    enabled: boolean,
+    serviceDates: string[],
+  ): Promise<{ sourceId: number; enabled: boolean } | null>;
   addCustomSource(
     url: string,
     serviceDates: string[],
@@ -80,6 +85,17 @@ export function createRecommendationPublication(
   }
 
   return {
+    setCustomSourceEnabled(sourceId, enabled, serviceDates) {
+      return runExclusive(async () => {
+        const result = options.db.prepare("UPDATE custom_sources SET enabled = ? WHERE id = ?")
+          .run(enabled ? 1 : 0, sourceId);
+        if (result.changes === 0) return null;
+        // Rebuild the active dates from cached assessments only. Changing source
+        // eligibility never fetches pages or spends model requests.
+        await assessDates(serviceDates, new OpenAiRequestBudget(0));
+        return { sourceId, enabled };
+      });
+    },
     addCustomSource(url, serviceDates) {
       return runExclusive(async () => {
         if (!options.customSources) {

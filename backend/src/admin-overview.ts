@@ -201,13 +201,18 @@ export function getAdminOverview(db: Database.Database, options: AdminOverviewOp
   const latestFetch = db
     .prepare(
       `SELECT finished_at AS attemptedAt, outcome
-       FROM source_fetches ORDER BY id DESC LIMIT 1`,
+       FROM source_fetches
+       WHERE custom_source_id IS NULL OR custom_source_id IN (SELECT id FROM custom_sources WHERE enabled = 1)
+       ORDER BY id DESC LIMIT 1`,
     )
     .get() as { attemptedAt: string; outcome: string } | undefined;
   const latestSuccess = db
     .prepare(
       `SELECT finished_at AS finishedAt
-       FROM source_fetches WHERE outcome = 'success' ORDER BY id DESC LIMIT 1`,
+       FROM source_fetches
+       WHERE outcome = 'success'
+         AND (custom_source_id IS NULL OR custom_source_id IN (SELECT id FROM custom_sources WHERE enabled = 1))
+       ORDER BY id DESC LIMIT 1`,
     )
     .get() as { finishedAt: string } | undefined;
 

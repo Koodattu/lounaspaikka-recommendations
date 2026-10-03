@@ -3,6 +3,7 @@ import { isIsoDate, startOfWeek, todayInHelsinki } from "./dates";
 export interface BrowserLocation {
   pathname: string;
   search: string;
+  hash?: string;
 }
 
 export interface BrowserAdapter {
@@ -17,6 +18,7 @@ export const browserAdapter: BrowserAdapter = {
   location: () => ({
     pathname: window.location.pathname,
     search: window.location.search,
+    hash: window.location.hash,
   }),
   push: (path) => window.history.pushState({}, "", path),
   replace: (path) => window.history.replaceState({}, "", path),
@@ -78,10 +80,15 @@ export function menuSearchQuery(search: string): string {
   return new URLSearchParams(search).get("q") ?? "";
 }
 
-export function dayHref(date: string, query = ""): string {
+export function menuTargetId(restaurantId: string): string {
+  return `menu-${encodeURIComponent(restaurantId)}`;
+}
+
+export function dayHref(date: string, query = "", restaurantId?: string): string {
   const params = new URLSearchParams({ date });
   if (query) params.set("q", query);
-  return `/?${params}`;
+  const target = restaurantId ? `#${encodeURIComponent(menuTargetId(restaurantId))}` : "";
+  return `/?${params}${target}`;
 }
 
 export function restaurantHref(restaurantId: string, date: string, query = ""): string {

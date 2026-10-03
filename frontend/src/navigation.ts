@@ -8,6 +8,7 @@ export interface BrowserLocation {
 export interface BrowserAdapter {
   location(): BrowserLocation;
   push(path: string): void;
+  replace(path: string): void;
   reload(): void;
   subscribePopState(listener: () => void): () => void;
 }
@@ -18,6 +19,7 @@ export const browserAdapter: BrowserAdapter = {
     search: window.location.search,
   }),
   push: (path) => window.history.pushState({}, "", path),
+  replace: (path) => window.history.replaceState({}, "", path),
   reload: () => window.location.reload(),
   subscribePopState: (listener) => {
     window.addEventListener("popstate", listener);
@@ -72,18 +74,27 @@ export function restaurantRouteState(
   return { selectedDate, week };
 }
 
-export function dayHref(date: string): string {
-  return `/?date=${date}`;
+export function menuSearchQuery(search: string): string {
+  return new URLSearchParams(search).get("q") ?? "";
 }
 
-export function restaurantHref(restaurantId: string, date: string): string {
-  return restaurantWeekHref(restaurantId, startOfWeek(date), date);
+export function dayHref(date: string, query = ""): string {
+  const params = new URLSearchParams({ date });
+  if (query) params.set("q", query);
+  return `/?${params}`;
+}
+
+export function restaurantHref(restaurantId: string, date: string, query = ""): string {
+  return restaurantWeekHref(restaurantId, startOfWeek(date), date, query);
 }
 
 export function restaurantWeekHref(
   restaurantId: string,
   week: string,
   date: string,
+  query = "",
 ): string {
-  return `/ravintolat/${encodeURIComponent(restaurantId)}?week=${week}&date=${date}`;
+  const params = new URLSearchParams({ week, date });
+  if (query) params.set("q", query);
+  return `/ravintolat/${encodeURIComponent(restaurantId)}?${params}`;
 }

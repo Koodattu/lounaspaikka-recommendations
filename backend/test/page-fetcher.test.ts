@@ -1,8 +1,30 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMenuPageFetcher } from "../src/page-fetcher.js";
 
 describe("custom menu page fetcher", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("times out a stalled DNS lookup without starting a late HTTP request", async () => {
+    vi.useFakeTimers();
+    let resolveLookup!: (addresses: Array<{ address: string; family: number }>) => void;
+    const fetchImpl = vi.fn();
+    const fetchPage = createMenuPageFetcher({
+      fetchImpl,
+      lookupImpl: () => new Promise((resolve) => { resolveLookup = resolve; }),
+      timeoutMs: 100,
+    });
+    let result: unknown = null;
+    const request = fetchPage("https://example.com/menu").catch((error: unknown) => { result = error; });
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(result).toMatchObject({ message: "Menu page request timed out", outcome: "network_error" });
+    resolveLookup([{ address: "93.184.216.34", family: 4 }]);
+    await request;
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("fetches public HTTPS HTML with a descriptive user agent and safe plain text", async () => {
     const fetchImpl = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) =>
       new Response(
@@ -27,6 +49,57 @@ describe("custom menu page fetcher", () => {
     expect(
       (fetchImpl.mock.calls[0]?.[1]?.headers as Record<string, string>)["user-agent"],
     ).toContain("LunchMenuFetcher");
+  });
+
+  it("shares the deadline across redirects and releases successful request timers", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn(async () => new Response(null, {
+      headers: { location: "https://example.com/lunch" }, status: 302,
+    }));
+    const fetchPage = createMenuPageFetcher({
+      fetchImpl,
+      lookupImpl: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        return [{ address: "93.184.216.34", family: 4 }];
+      },
+      timeoutMs: 100,
+    });
+    const result = fetchPage("https://example.com/menu").catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await result).toMatchObject({ message: "Menu page request timed out" });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+
+    const success = createMenuPageFetcher({
+      fetchImpl: async () => new Response("Lounas", { headers: { "content-type": "text/plain" } }),
+      lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    });
+    expect(await success("https://example.com/menu")).toMatchObject({ text: "Lounas" });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("aborts a stalled response body when the deadline expires", async () => {
+    vi.useFakeTimers();
+    let requestSignal: AbortSignal | null | undefined;
+    const fetchPage = createMenuPageFetcher({
+      fetchImpl: async (_url, init) => {
+        requestSignal = init?.signal;
+        return new Response(new ReadableStream({
+          start(controller) {
+            requestSignal?.addEventListener("abort", () => controller.error(new DOMException("Aborted", "AbortError")), { once: true });
+          },
+        }), { headers: { "content-type": "text/plain" } });
+      },
+      lookupImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+      timeoutMs: 100,
+    });
+    const result = fetchPage("https://example.com/menu").catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await result).toMatchObject({ message: "Menu page request timed out", outcome: "network_error" });
+    expect(requestSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("rejects private targets, oversized responses, and verification pages", async () => {

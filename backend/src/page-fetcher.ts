@@ -219,7 +219,7 @@ export function createMenuPageFetcher(options: MenuPageFetcherOptions = {}) {
   const maxRedirects = options.maxRedirects ?? 3;
   const timeoutMs = options.timeoutMs ?? 15_000;
 
-  return async function fetchMenuPage(value: string): Promise<FetchedPage> {
+  async function fetchMenuPage(value: string, signal: AbortSignal): Promise<FetchedPage> {
     let currentUrl = normalizeMenuPageUrl(value);
 
     for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount += 1) {
@@ -228,12 +228,14 @@ export function createMenuPageFetcher(options: MenuPageFetcherOptions = {}) {
       const addresses = await lookupImpl(hostname).catch(() => {
         throw new PageFetchError("Menu page host could not be resolved", "network_error");
       });
+      // DNS lookup itself cannot be cancelled. Never continue a timed-out lookup.
+      if (signal.aborted) {
+        throw new PageFetchError("Menu page request timed out", "network_error");
+      }
       if (addresses.length === 0 || addresses.some(({ address }) => !isPublicIp(address))) {
         throw new PageFetchError("Menu page must resolve only to a public host", "invalid_response");
       }
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       let response: Response;
       const headers = {
         accept: "text/html, application/xhtml+xml, text/plain",
@@ -246,17 +248,16 @@ export function createMenuPageFetcher(options: MenuPageFetcherOptions = {}) {
           ? await fetchImpl(currentUrl, {
               headers,
               redirect: "manual",
-              signal: controller.signal,
+              signal,
             })
           : await requestValidatedAddress(
               currentUrl,
               addresses,
               headers,
-              controller.signal,
+              signal,
               maxBytes,
             );
       } catch (error) {
-        clearTimeout(timeout);
         if (error instanceof PageFetchError) throw error;
         const message = error instanceof Error && error.name === "AbortError"
           ? "Menu page request timed out"
@@ -329,15 +330,27 @@ export function createMenuPageFetcher(options: MenuPageFetcherOptions = {}) {
           truncated,
         };
       } catch (error) {
-        if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) {
+        if (signal.aborted || (error instanceof Error && error.name === "AbortError")) {
           throw new PageFetchError("Menu page request timed out", "network_error");
         }
         throw error;
-      } finally {
-        clearTimeout(timeout);
       }
     }
 
     throw new PageFetchError("Menu page has too many redirects", "http_error");
+  }
+
+  return (value: string): Promise<FetchedPage> => {
+    const controller = new AbortController();
+    return new Promise((resolve, reject) => {
+      // One deadline covers DNS, redirects, and the response body.
+      const timeout = setTimeout(() => {
+        controller.abort();
+        reject(new PageFetchError("Menu page request timed out", "network_error"));
+      }, timeoutMs);
+      void fetchMenuPage(value, controller.signal)
+        .finally(() => clearTimeout(timeout))
+        .then(resolve, reject);
+    });
   };
 }

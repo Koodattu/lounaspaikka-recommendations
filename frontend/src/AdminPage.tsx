@@ -133,6 +133,7 @@ function ExternalLinkHint() {
 function AdminDashboard({
   data,
   error,
+  onFeedbackSaved,
   onLogout,
   onRefresh,
   onSessionExpired,
@@ -141,6 +142,7 @@ function AdminDashboard({
 }: {
   data: AdminOverview;
   error: string | null;
+  onFeedbackSaved: (assessmentId: number, direction: "higher" | "lower" | null) => void;
   onLogout: () => Promise<void>;
   onRefresh: () => Promise<void>;
   onSessionExpired: () => void;
@@ -221,12 +223,13 @@ function AdminDashboard({
         headers: { "content-type": "application/json" },
         method: "PUT",
       });
-      await onRefresh();
+      onFeedbackSaved(assessmentId, direction);
       setFeedbackMessage(
         direction
           ? `Palaute tallennettiin: ${restaurantName}.`
           : `Palaute poistettiin: ${restaurantName}.`,
       );
+      await onRefresh();
     } catch (error) {
       if (error instanceof AdminRequestError && error.status === 401) {
         onSessionExpired();
@@ -547,7 +550,9 @@ function AdminDashboard({
               <li key={error.id}>
                 <div>
                   <strong>{outcomeLabel(error.outcome)}</strong>
-                  <span>Tarkista lähdesivu ja päivitä tiedot, kun sivu on jälleen luettavissa.</span>
+                  <span>{error.sourceUrl
+                    ? "Tarkista lähdesivu ja yritä hakua uudelleen Lisää ruokalistasivu -lomakkeella."
+                    : "Hakua yritetään uudelleen seuraavassa ajastetussa keräyksessä."}</span>
                   <details className="admin-error-details admin-error-row-details">
                     <summary>Tekniset tiedot</summary>
                     <p>{error.message ?? "Virheen lisätietoa ei ole saatavilla."}</p>
@@ -645,6 +650,17 @@ export function AdminPage() {
     setMode("login");
   }
 
+  function feedbackSaved(assessmentId: number, direction: "higher" | "lower" | null) {
+    setData((current) => current ? {
+      ...current,
+      recentAssessments: current.recentAssessments.map((assessment) =>
+        assessment.assessmentId === assessmentId
+          ? { ...assessment, feedbackDirection: direction }
+          : assessment,
+      ),
+    } : current);
+  }
+
   return (
     <>
       <AdminHeader />
@@ -669,6 +685,7 @@ export function AdminPage() {
         <AdminDashboard
           data={data}
           error={message}
+          onFeedbackSaved={feedbackSaved}
           onLogout={logout}
           onRefresh={loadOverview}
           onSessionExpired={sessionExpired}

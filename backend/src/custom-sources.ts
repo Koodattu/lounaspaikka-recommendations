@@ -150,9 +150,9 @@ function validateExtraction(value: unknown, serviceDates: string[]): PageExtract
   return extraction;
 }
 
-function reuseExtraction(value: unknown, serviceDates: string[]): PageExtraction | null {
+function reuseExtraction(value: string, serviceDates: string[]): PageExtraction | null {
   try {
-    const extraction = pageExtractionSchema.parse(value);
+    const extraction = pageExtractionSchema.parse(JSON.parse(value));
     const requestedMenus = extraction.menus.filter((menu) => serviceDates.includes(menu.serviceDate));
     return validateExtraction({ ...extraction, menus: requestedMenus }, serviceDates);
   } catch {
@@ -257,21 +257,22 @@ export function createCustomSourceService(options: CustomSourceServiceOptions): 
         );
       }
       contentHash = sha256(fetchedPage.text);
-      const previous = options.db
+      const previousExtractions = options.db
         .prepare(
           `SELECT extracted_json
            FROM custom_source_runs
-           WHERE custom_source_id = ? AND id <> ? AND content_hash = ?
-             AND outcome IN ('success', 'unchanged') AND extracted_json IS NOT NULL
+           WHERE custom_source_id = ? AND content_hash = ?
+             AND outcome = 'success' AND extracted_json IS NOT NULL
              AND model = ? AND prompt_version = ?
-           ORDER BY id DESC LIMIT 1`,
+           ORDER BY id DESC`,
         )
-        .get(source.id, runId, contentHash, options.model, promptVersion) as
-        | { extracted_json: string }
-        | undefined;
+        .iterate(source.id, contentHash, options.model, promptVersion) as Iterable<{ extracted_json: string }>;
       let cachedExtraction: PageExtraction | null = null;
-      if (previous) {
-        cachedExtraction = reuseExtraction(JSON.parse(previous.extracted_json), serviceDates);
+      // Reused runs may contain only a subset of the original dates. Search
+      // original extractions until one covers the whole requested date set.
+      for (const previous of previousExtractions) {
+        cachedExtraction = reuseExtraction(previous.extracted_json, serviceDates);
+        if (cachedExtraction) break;
       }
       const reusedExtraction = cachedExtraction !== null;
       let extractorResult: MenuExtractorResult;

@@ -8,6 +8,7 @@ The first version is intentionally narrow: no user accounts, personalization, se
 
 - At startup and every day at 04:15 Europe/Helsinki, the backend refreshes dates from today through Sunday. A Sunday refresh includes the following week.
 - An admin can add a public HTTPS restaurant page that is missing from Lounaspaikka. Its menu must be present in the static page text; PDF menus and browser-rendered pages are not supported. The page is extracted into the same dated menu structure and refreshed with the normal daily run.
+- Custom-page fetches have a 15-second total deadline, including DNS, redirects, and response reading. An unchanged page can reuse an earlier extraction covering all requested dates, even after a refresh for fewer dates; source, content, model, and prompt versions must match.
 - Identical menus create a new freshness observation, not a duplicate revision. Changed menus remain available as immutable history.
 - When `OPENAI_API_KEY` is set, it extracts custom menu pages and assesses only unseen menu revisions. The model sees menu facts without restaurant identity and returns four conservatively calibrated 0–10 scores plus one short Finnish recommendation rationale.
 - OpenAI calls have separate hard request budgets for each startup/scheduled refresh and each admin source-add action. Cached custom-page extractions do not consume budget, and setting a budget to zero blocks calls for that operation.
@@ -15,7 +16,8 @@ The first version is intentionally narrow: no user accounts, personalization, se
 - Ranking is deterministic: appeal 35%, distinctiveness 25%, variety 20%, and value 20%. Assessments without an actual extracted lunch course are excluded; ties are ordered by restaurant ID.
 - The admin can label recent immutable assessments as too high or too low. Labels are stored for shared-profile calibration and never act as hidden restaurant penalties or immediate ranking overrides.
 - The reader UI is Finnish. OpenAI instructions and all code are English; model rationales are Finnish.
-- Readers can search the selected day's full menus by restaurant, town, address, or dish. Search preserves the shared ranking and stays applied when changing dates.
+- Readers can search the selected day's full menus by restaurant, town, address, or dish. Search preserves the shared ranking and stays applied when changing dates, visiting a restaurant, and returning. The optional `q` in the page URL also restores search after reload or when sharing the link.
+- `Valitse päivä` jumps directly to a date in the daily list or a restaurant's week. `Kopioi linkki` copies the selected date and search so another reader can open the same view. If clipboard access is unavailable, a selected link field supports manual copying. Links show the latest stored menus for that date, not a frozen snapshot.
 
 ## Run with Docker Compose
 
@@ -37,6 +39,14 @@ Treat calibration feedback as a review dataset: collect a balanced set of labels
 For production, set `SITE_ADDRESS` to a DNS name such as `lounas.example.fi`, point that name at the host, and allow inbound TCP 80/443. Caddy then obtains and renews HTTPS certificates automatically.
 
 SQLite data is stored in the `lunch_data` volume. Back up that volume before host migration or destructive Docker maintenance. Do not use `docker compose down -v` unless deleting the stored history is intentional.
+
+### Established production release
+
+This repository's `origin/main` is deployed to [lounas.koodattu.dev](https://lounas.koodattu.dev/) on the existing `vaarattu-server` SSH target. The VM's `koodattu-auto-deploy.timer` checks for changes five minutes after its preceding run finishes. It fast-forwards the clean checkout under `/srv/projects/lounaspaikka-recommendations`, validates Compose with the existing deployments-repository override, builds, and waits for container health. There is no GitHub Actions workflow or test gate on the VM: run `npm test`, `npm run typecheck`, `npm run build`, and review the complete staged diff **before pushing to main**.
+
+After a normal push, follow the existing timer instead of starting a second deployment. Verify `/var/lib/koodattu-auto-deploy/lounaspaikka-recommendations.state` contains the released commit, check the app containers and [public health endpoint](https://lounas.koodattu.dev/api/health), and exercise safe reader flows. The state record also includes the deployments-repository revision. A Git push or updated server checkout alone does not prove that new containers are healthy.
+
+The runner records only successful deployments and retries failures. Inspect `journalctl -u koodattu-auto-deploy.service` before a corrective release. There is no generic database rollback; preserve volumes and shared infrastructure. An older application may need rebuilding if its image was pruned. Prefer a history-preserving corrective commit through the same workflow, and do not undo somebody else's newer release.
 
 ## Local development
 

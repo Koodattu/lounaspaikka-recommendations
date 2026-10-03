@@ -23,6 +23,83 @@ describe("custom menu sources", () => {
 
   afterEach(() => db?.close());
 
+  it("reuses covered dates after a narrower cached extraction without spending another request", async () => {
+    db = openDatabase(":memory:");
+    const extractor = vi.fn(async ({ serviceDates: dates }: { serviceDates: string[] }) => ({
+      extraction: {
+        pageType: "restaurant_page",
+        restaurant: {
+          name: "Esimerkkiravintola", address: null, city: "Seinäjoki",
+          description: null, phone: null, openingHours: [],
+        },
+        menus: dates.map((serviceDate) => ({
+          serviceDate, status: "published", menuText: "Kasviskeitto",
+          lunchHours: null, priceText: "12 €", title: "Lounas",
+        })),
+      },
+    }));
+    const service = createCustomSourceService({
+      db, extractor, model: "synthetic-cache-test",
+      fetchPage: async (url) => ({
+        body: "same dated menu page", text: "same dated menu page",
+        finalUrl: url, httpStatus: 200, truncated: false,
+      }),
+    });
+    const source = await service.addAndCrawl("https://example.com/menu", serviceDates, new OpenAiRequestBudget(1));
+    await service.addAndCrawl("https://example.com/menu", ["2026-07-15"], new OpenAiRequestBudget(0));
+
+    const budget = new OpenAiRequestBudget(0);
+    await expect(service.addAndCrawl("https://example.com/menu", serviceDates, budget))
+      .resolves.toMatchObject({ reusedExtraction: true, createdRevisionCount: 0 });
+    expect(extractor).toHaveBeenCalledTimes(1);
+    expect(budget.used).toBe(0);
+
+    // A newer original extraction for another date must not hide older coverage.
+    await service.addAndCrawl("https://example.com/menu", ["2026-07-16"], new OpenAiRequestBudget(1));
+    await expect(service.addAndCrawl("https://example.com/menu", serviceDates, new OpenAiRequestBudget(0)))
+      .resolves.toMatchObject({ reusedExtraction: true, createdRevisionCount: 0 });
+    expect(extractor).toHaveBeenCalledTimes(2);
+    for (const date of serviceDates) {
+      expect(getDayMenus(db, date)[0]?.menu.text).toBe("Kasviskeitto");
+      expect(getOfferingHistory(db, source.restaurantId, date)).toHaveLength(1);
+    }
+  });
+
+  it.each(["source", "content", "model", "prompt"])("does not reuse an extraction with different %s scope", async (scope) => {
+    db = openDatabase(":memory:");
+    const options = {
+      db, model: "synthetic-cache-test", promptVersion: "test-v1",
+      fetchPage: async (url: string) => ({
+        body: "menu", text: "menu", finalUrl: url, httpStatus: 200, truncated: false,
+      }),
+      extractor: async () => ({ extraction: {
+        pageType: "restaurant_page",
+        restaurant: {
+          name: "Esimerkkiravintola", address: null, city: null,
+          description: null, phone: null, openingHours: [],
+        },
+        menus: [{
+          serviceDate: "2026-07-14", status: "published", menuText: "Kasviskeitto",
+          lunchHours: null, priceText: null, title: null,
+        }],
+      } }),
+    };
+    await createCustomSourceService(options).addAndCrawl("https://example.com/menu", ["2026-07-14"]);
+    const changed = createCustomSourceService({
+      ...options,
+      ...(scope === "model" ? { model: "different-model" } : {}),
+      ...(scope === "prompt" ? { promptVersion: "test-v2" } : {}),
+      ...(scope === "content" ? { fetchPage: async (url: string) => ({
+        ...await options.fetchPage(url), text: "changed menu",
+      }) } : {}),
+    });
+    await expect(changed.addAndCrawl(
+      scope === "source" ? "https://example.com/other" : "https://example.com/menu",
+      ["2026-07-14"], new OpenAiRequestBudget(0),
+    )).rejects.toThrow("budget of 0 has been exhausted");
+    expect(getDayMenus(db, "2026-07-14")[0]?.menu.text).toBe("Kasviskeitto");
+  });
+
   it("unions source-scoped snapshots and reuses an unchanged page extraction", async () => {
     db = openDatabase(":memory:");
     expect(db.pragma("user_version", { simple: true })).toBe(5);

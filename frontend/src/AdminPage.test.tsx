@@ -139,6 +139,16 @@ describe("admin recovery", () => {
     );
     expect(screen.getByRole("heading", { name: "Järjestelmän tila" })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    if (operation === "feedback") {
+      const lower = screen.getByRole("button", { name: "Liian korkea" });
+      expect(lower.getAttribute("aria-pressed")).toBe("true");
+      fetchMock.mockResolvedValueOnce(json({ assessmentId: 1, direction: null }))
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      fireEvent.click(lower);
+      expect(await screen.findByText("Palaute poistettiin: Vinola.")).toBeTruthy();
+      expect(lower.getAttribute("aria-pressed")).toBe("false");
+      expect(JSON.parse(fetchMock.mock.calls[3]?.[1]?.body as string)).toEqual({ direction: null });
+    }
   });
 
   it("explains empty calibration and disabled source states without raw status codes", async () => {

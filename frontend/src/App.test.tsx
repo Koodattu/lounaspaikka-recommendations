@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import { formatLongDate, todayInHelsinki } from "./dates";
@@ -125,9 +125,118 @@ const dayResponse = {
 };
 
 describe("reader app", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
   beforeEach(() => {
     window.history.replaceState({}, "", "/?date=2026-07-14");
     vi.restoreAllMocks();
+  });
+
+  it("jumps directly to a chosen date with one request and preserves the menu search", async () => {
+    window.history.replaceState({}, "", "/?date=2026-07-14&q=curry");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      new Response(JSON.stringify({ ...dayResponse, serviceDate: String(input).split("/").at(-1) })),
+    );
+    render(<App />);
+    await screen.findByRole("searchbox");
+    fireEvent.click(screen.getByText("Valitse päivä"));
+    fireEvent.change(screen.getByLabelText("Lounaspäivä"), { target: { value: "2026-08-04" } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Näytä lounaat" }));
+    await screen.findByRole("searchbox");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.lastCall?.[0]).toBe("/api/days/2026-08-04");
+    expect(window.location.search).toBe("?date=2026-08-04&q=curry");
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("curry");
+    expect(screen.getByText("Valitse päivä").closest("details")?.open).toBe(false);
+    expect(document.activeElement).toBe(screen.getByText("Valitse päivä"));
+  });
+
+  it("opens the selected restaurant date and week while retaining search and rejecting an empty date", async () => {
+    window.history.replaceState({}, "", "/ravintolat/vinola?date=2026-07-14&q=kuhaa");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const weekStart = String(input).split("/").at(-1);
+      return new Response(JSON.stringify({
+        restaurant: { ...restaurant, description: null, openingHours: [] },
+        source: dayResponse.source, weekStart,
+        days: [{ ...menu, serviceDate: weekStart === "2026-08-03" ? "2026-08-04" : "2026-07-14" }],
+      }));
+    });
+    render(<App />);
+    await screen.findByRole("heading", { name: "Vinola" });
+    fireEvent.click(screen.getByText("Valitse päivä"));
+    const date = screen.getByLabelText("Lounaspäivä");
+    fireEvent.change(date, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Näytä lounaat" }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Valitse päivä").closest("details")?.open).toBe(true);
+    fireEvent.change(date, { target: { value: "2026-08-04" } });
+    fireEvent.click(screen.getByRole("button", { name: "Näytä lounaat" }));
+    await screen.findByRole("heading", { name: "Tiistai 4. elokuuta" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.lastCall?.[0]).toBe("/api/restaurants/vinola/weeks/2026-08-03");
+    expect(window.location.search).toBe("?week=2026-08-03&date=2026-08-04&q=kuhaa");
+    expect(screen.getByRole("link", { name: "Tiistai 4. elokuuta · suosituksiin" }).getAttribute("href"))
+      .toBe("/?date=2026-08-04&q=kuhaa");
+  });
+
+  it("copies the selected day and search and clears copy confirmation when the view changes", async () => {
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(dayResponse)));
+    render(<App />);
+    fireEvent.change(await screen.findByRole("searchbox"), { target: { value: "Seinäjoki kuhaa" } });
+    fireEvent.click(screen.getByRole("button", { name: "Kopioi linkki" }));
+    expect(await screen.findByText("Linkki kopioitu.")).toBeTruthy();
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?date=2026-07-14&q=Sein%C3%A4joki+kuhaa`);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "curry" } });
+    expect(screen.queryByText("Linkki kopioitu.")).toBeNull();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["denied", "unavailable"])("offers a selected restaurant link for manual copy when the clipboard is %s", async (mode) => {
+    window.history.replaceState({}, "", "/ravintolat/vinola?date=2026-07-14&q=kuhaa");
+    vi.stubGlobal("navigator", mode === "denied"
+      ? { clipboard: { writeText: vi.fn().mockRejectedValue(new DOMException("Denied", "NotAllowedError")) } }
+      : {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      restaurant: { ...restaurant, description: null, openingHours: [] },
+      source: dayResponse.source, weekStart: "2026-07-13", days: [],
+    })));
+    render(<App />);
+    await screen.findByRole("heading", { name: "Viikolle ei löytynyt ruokalistaa." });
+    fireEvent.click(screen.getByRole("button", { name: "Kopioi linkki" }));
+    const link = await screen.findByRole("textbox", { name: "Jaettava linkki" }) as HTMLInputElement;
+    expect(link.value).toBe(`${window.location.origin}/ravintolat/vinola?week=2026-07-13&date=2026-07-14&q=kuhaa`);
+    expect(document.activeElement).toBe(link);
+    expect(link.selectionStart).toBe(0);
+    expect(link.selectionEnd).toBe(link.value.length);
+    expect(screen.queryByText("Linkki kopioitu.")).toBeNull();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("pins the home link to its date and ignores a late copy result after navigation", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T09:00:00Z"));
+    window.history.replaceState({}, "", "/");
+    let finishCopy!: () => void;
+    const writeText = vi.fn(() => new Promise<void>((resolve) => { finishCopy = resolve; }));
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      new Response(JSON.stringify({ ...dayResponse, serviceDate: String(input).split("/").at(-1) })),
+    );
+    render(<App />);
+    await screen.findByRole("searchbox");
+    fireEvent.click(screen.getByRole("button", { name: "Kopioi linkki" }));
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?date=2026-07-14`);
+    expect((screen.getByRole("button", { name: "Kopioi linkki" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Seuraava päivä" }));
+    await act(async () => finishCopy());
+    expect(screen.queryByText("Linkki kopioitu.")).toBeNull();
+    expect((screen.getByRole("button", { name: "Kopioi linkki" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(window.location.search).toBe("?date=2026-07-15");
   });
 
   it("recovers from a malformed restaurant link without crashing or requesting data", () => {
@@ -210,7 +319,47 @@ describe("reader app", () => {
     expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent))
       .toEqual(["Kasvisravintola"]);
     expect(screen.getByRole("link", { name: "Viikon ruokalista" }).getAttribute("href"))
-      .toBe("/ravintolat/kasvis?week=2026-07-13&date=2026-07-15");
+      .toBe("/ravintolat/kasvis?week=2026-07-13&date=2026-07-15&q=curry");
+  });
+
+  it("keeps menu search in reloadable URLs and restaurant return links without fetching on input", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(dayResponse)));
+    const { unmount } = render(<App />);
+    fireEvent.change(await screen.findByRole("searchbox"), { target: { value: "Seinäjoki kuhaa" } });
+    expect(new URLSearchParams(window.location.search).get("q")).toBe("Seinäjoki kuhaa");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const weekHref = screen.getByRole("link", { name: "Viikon ruokalista" }).getAttribute("href")!;
+    expect(new URL(weekHref, window.location.origin).searchParams.get("q")).toBe("Seinäjoki kuhaa");
+
+    unmount();
+    window.history.replaceState({}, "", weekHref);
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify({
+      days: [{ ...menu, fetchedAt: "2026-07-14T03:00:00Z", serviceDate: "2026-07-14" }],
+      restaurant: { ...restaurant, description: null, openingHours: [] },
+      source: dayResponse.source, weekStart: "2026-07-13", weekEnd: "2026-07-19",
+    })));
+    const weekView = render(<App />);
+    await screen.findByRole("heading", { name: "Vinola" });
+    const returnHref = screen.getByRole("link", { name: "Tiistai 14. heinäkuuta · suosituksiin" }).getAttribute("href")!;
+    expect(new URL(returnHref, window.location.origin).searchParams.get("q")).toBe("Seinäjoki kuhaa");
+    weekView.unmount();
+
+    window.history.replaceState({}, "", returnHref);
+    vi.mocked(globalThis.fetch).mockImplementation(async () => new Response(JSON.stringify(dayResponse)));
+    render(<App />);
+    expect((await screen.findByRole("searchbox") as HTMLInputElement).value).toBe("Seinäjoki kuhaa");
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Tyhjennä haku" }));
+    expect(new URLSearchParams(window.location.search).has("q")).toBe(false);
+    expect(screen.getAllByRole("article")).toHaveLength(3);
+
+    await act(async () => {
+      window.history.replaceState({}, "", "/?date=2026-07-14&q=curry");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("curry");
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
   });
 
   it.each(["pending", "ready", "unavailable"])("provides a recovery path for an empty %s day", async (status) => {
@@ -247,6 +396,7 @@ describe("reader app", () => {
     const browser: BrowserAdapter = {
       location: () => location,
       push,
+      replace: vi.fn(),
       reload: vi.fn(),
       subscribePopState: () => () => undefined,
     };
@@ -511,24 +661,34 @@ describe("reader app", () => {
     );
   });
 
-  it("keeps an empty restaurant week useful and announced", async () => {
+  it.each(["missing", "not_published", "no-days"])("keeps an empty %s restaurant week useful and announced", async (status) => {
     window.history.replaceState({}, "", "/ravintolat/vinola?week=2026-07-13&date=2026-07-14");
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      new Response(
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const weekStart = String(input).split("/").at(-1)!;
+      const startDay = weekStart === "2026-07-20" ? 20 : 13;
+      return new Response(
         JSON.stringify({
-          days: [],
+          days: status === "no-days" ? [] : Array.from({ length: 7 }, (_, index) => ({
+            fetchedAt: status === "missing" ? null : "2026-07-14T03:10:00.000Z",
+            lunchHours: null,
+            serviceDate: `2026-07-${startDay + index}`,
+            status,
+            structuredMenu: null,
+            text: null,
+            title: null,
+          })),
           restaurant: {
             ...restaurant,
             description: "Rento lounasravintola keskustassa.",
             openingHours: [],
           },
           source: dayResponse.source,
-          weekEnd: "2026-07-19",
-          weekStart: "2026-07-13",
+          weekEnd: `2026-07-${startDay + 6}`,
+          weekStart,
         }),
         { status: 200 },
-      ),
-    );
+      );
+    });
 
     render(<App />);
 
@@ -538,6 +698,7 @@ describe("reader app", () => {
       .toBeTruthy();
     expect(screen.getByRole("link", { name: "Palaa suosituksiin" }).getAttribute("href"))
       .toBe("/?date=2026-07-14");
+    expect(screen.queryByRole("heading", { name: "Muut päivät" })).toBeNull();
     expect(
       screen.getByRole("link", { name: /Lounaspaikka.*avautuu uuteen välilehteen/ }),
     ).toBeTruthy();
@@ -550,6 +711,34 @@ describe("reader app", () => {
     );
     expect(await screen.findByText("Vinola: viikolle 20.7.–26.7. ei löytynyt ruokalistaa."))
       .toBeTruthy();
+  });
+
+  it("keeps the newly selected week in the return link while loading and after failure", async () => {
+    window.history.replaceState({}, "", "/ravintolat/vinola?date=2026-07-14");
+    let rejectWeek!: (error: Error) => void;
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        days: [{ ...menu, serviceDate: "2026-07-14", fetchedAt: "2026-07-14T03:00:00Z" }],
+        restaurant: { ...restaurant, description: null, openingHours: [] },
+        source: dayResponse.source,
+        weekStart: "2026-07-13",
+        weekEnd: "2026-07-19",
+      })))
+      .mockImplementationOnce(() => new Promise<Response>((_resolve, reject) => { rejectWeek = reject; }));
+    render(<App />);
+    await screen.findByRole("heading", { name: "Tiistai 14. heinäkuuta" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Seuraava viikko" }));
+    expect(screen.getByText("Ravintolan ruokalistaa ladataan…")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Tiistai 21. heinäkuuta · suosituksiin" }).getAttribute("href"))
+      .toBe("/?date=2026-07-21");
+    expect(screen.queryByRole("heading", { name: "Tiistai 14. heinäkuuta" })).toBeNull();
+
+    await act(async () => rejectWeek(new Error("offline")));
+    expect(await screen.findByRole("button", { name: "Yritä uudelleen" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Tiistai 21. heinäkuuta · suosituksiin" }).getAttribute("href"))
+      .toBe("/?date=2026-07-21");
+    expect(document.title).toBe("Vinola – Tiistai 21. heinäkuuta | Mihin lounaalle?");
   });
 
   it("keeps route context aligned when a selected restaurant day is missing", async () => {

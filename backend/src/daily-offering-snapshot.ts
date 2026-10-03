@@ -57,6 +57,7 @@ const queryChunkSize = 100;
 export function getDailyOfferingSnapshots(
   db: Database.Database,
   requestedServiceDates: readonly string[],
+  restaurantId?: string,
 ): DailyOfferingSnapshot[] {
   const serviceDates = [...new Set(requestedServiceDates)];
   const entriesByDate = new Map(
@@ -112,9 +113,10 @@ export function getDailyOfferingSnapshots(
         JOIN offering_revisions revision ON revision.id = observation.revision_id
         JOIN restaurants restaurant ON restaurant.id = observation.restaurant_id
         LEFT JOIN custom_sources custom_source ON custom_source.id = restaurant.custom_source_id
+        ${restaurantId === undefined ? "" : "WHERE observation.restaurant_id = ?"}
         ORDER BY latest_fetches.service_date, restaurant.name COLLATE NOCASE, restaurant.id`,
       )
-      .all(...chunk) as SnapshotRow[];
+      .all(...chunk, ...(restaurantId === undefined ? [] : [restaurantId])) as SnapshotRow[];
 
     for (const row of rows) {
       entriesByDate.get(row.serviceDate)?.push({

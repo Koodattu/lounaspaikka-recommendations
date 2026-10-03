@@ -71,60 +71,63 @@ function getRecentAssessments(
       versions.schemaVersion,
       versions.model,
     ) as Array<{ serviceDate: string }>;
-  const snapshots = getDailyOfferingSnapshots(
-    db,
-    assessmentDates.map(({ serviceDate }) => serviceDate),
-  );
   const recent: RecentAssessmentRow[] = [];
   let activeDateCount = 0;
 
-  for (const snapshot of snapshots) {
-    const revisionIds = snapshot.entries
-      .filter(
-        (entry) =>
-          entry.offering.availability === "published" && entry.offering.menuText !== null,
-      )
-      .map((entry) => entry.revisionId);
-    if (revisionIds.length === 0) continue;
-    const placeholders = revisionIds.map(() => "?").join(", ");
-    const rows = db
-      .prepare(
-        `SELECT
-          assessment.id AS assessmentId,
-          assessment.assessed_at AS assessedAt,
-          assessment.rationale_fi AS rationale,
-          assessment.scores_json AS scoresJson,
-          assessment.total_score AS score,
-          feedback.direction AS feedbackDirection,
-          restaurant.id AS restaurantId,
-          restaurant.name AS restaurantName,
-          revision.menu_text AS menuText,
-          revision.service_date AS serviceDate
-         FROM assessments assessment
-         JOIN offering_revisions revision ON revision.id = assessment.revision_id
-         JOIN restaurants restaurant ON restaurant.id = revision.restaurant_id
-         LEFT JOIN assessment_feedback feedback ON feedback.assessment_id = assessment.id
-         WHERE assessment.revision_id IN (${placeholders})
-           AND assessment.profile_version = ?
-           AND assessment.rubric_version = ?
-           AND assessment.prompt_version = ?
-           AND assessment.schema_version = ?
-           AND assessment.model = ?
-         ORDER BY assessment.total_score DESC,
-           restaurant.name COLLATE NOCASE, assessment.id DESC`,
-      )
-      .all(
-        ...revisionIds,
-        versions.profileVersion,
-        versions.rubricVersion,
-        versions.promptVersion,
-        versions.schemaVersion,
-        versions.model,
-      ) as RecentAssessmentRow[];
-    if (rows.length === 0) continue;
-    recent.push(...rows);
-    activeDateCount += 1;
-    if (activeDateCount === 8) break;
+  // Older assessed dates can have unassessed replacements; count only active dates.
+  for (let offset = 0; offset < assessmentDates.length; offset += 8) {
+    const snapshots = getDailyOfferingSnapshots(
+      db,
+      assessmentDates.slice(offset, offset + 8).map(({ serviceDate }) => serviceDate),
+    );
+    for (const snapshot of snapshots) {
+      const revisionIds = snapshot.entries
+        .filter(
+          (entry) =>
+            entry.offering.availability === "published" && entry.offering.menuText !== null,
+        )
+        .map((entry) => entry.revisionId);
+      if (revisionIds.length === 0) continue;
+      const placeholders = revisionIds.map(() => "?").join(", ");
+      const rows = db
+        .prepare(
+          `SELECT
+            assessment.id AS assessmentId,
+            assessment.assessed_at AS assessedAt,
+            assessment.rationale_fi AS rationale,
+            assessment.scores_json AS scoresJson,
+            assessment.total_score AS score,
+            feedback.direction AS feedbackDirection,
+            restaurant.id AS restaurantId,
+            restaurant.name AS restaurantName,
+            revision.menu_text AS menuText,
+            revision.service_date AS serviceDate
+           FROM assessments assessment
+           JOIN offering_revisions revision ON revision.id = assessment.revision_id
+           JOIN restaurants restaurant ON restaurant.id = revision.restaurant_id
+           LEFT JOIN assessment_feedback feedback ON feedback.assessment_id = assessment.id
+           WHERE assessment.revision_id IN (${placeholders})
+             AND assessment.profile_version = ?
+             AND assessment.rubric_version = ?
+             AND assessment.prompt_version = ?
+             AND assessment.schema_version = ?
+             AND assessment.model = ?
+           ORDER BY assessment.total_score DESC,
+             restaurant.name COLLATE NOCASE, assessment.id DESC`,
+        )
+        .all(
+          ...revisionIds,
+          versions.profileVersion,
+          versions.rubricVersion,
+          versions.promptVersion,
+          versions.schemaVersion,
+          versions.model,
+        ) as RecentAssessmentRow[];
+      if (rows.length === 0) continue;
+      recent.push(...rows);
+      activeDateCount += 1;
+      if (activeDateCount === 8) return recent;
+    }
   }
 
   return recent;

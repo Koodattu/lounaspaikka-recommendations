@@ -1,0 +1,24 @@
+{
+  "node": "v24.4.1",
+  "workload": {
+    "restaurants": 80,
+    "days": 63,
+    "firstDate": "2026-08-03"
+  },
+  "warmup": 5,
+  "samples": 25,
+  "measurements": {
+    "restaurantWeek": {
+      "firstReadMs": 4.812,
+      "medianMs": 3.682,
+      "p95Ms": 4.063,
+      "resultHash": "4bc4ecf75211d4575795f1ba4a3c9e245437df61aa4bf8bf61d240ebb410e7f8"
+    },
+    "adminOverview": {
+      "firstReadMs": 13.111,
+      "medianMs": 10.734,
+      "p95Ms": 11.723,
+      "resultHash": "6c6752081a8eb6a616153746c34d1f87d319e561b0cd1855b724159d50f176db"
+    }
+  }
+}

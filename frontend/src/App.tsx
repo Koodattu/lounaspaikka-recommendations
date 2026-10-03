@@ -1,6 +1,6 @@
-import { Component, lazy, Suspense, type ReactNode, useEffect, useState } from "react";
+import { Component, lazy, Suspense, type ReactNode, useEffect, useRef, useState } from "react";
 
-import { fetchJson } from "./api";
+import { fetchJson, HttpError } from "./api";
 import {
   addDays,
   formatLongDate,
@@ -85,8 +85,16 @@ function NewTabHint() {
   return <span className="visually-hidden"> (avautuu uuteen välilehteen)</span>;
 }
 
-function mapHref(address: string): string {
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+function restaurantAddress({ address, city }: Restaurant): string | null {
+  if (!address) return city;
+  if (!city || address.toLocaleLowerCase("fi-FI").endsWith(city.toLocaleLowerCase("fi-FI"))) {
+    return address;
+  }
+  return `${address}, ${city}`;
+}
+
+function mapHref(restaurant: Restaurant): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(restaurantAddress(restaurant) ?? restaurant.name)}`;
 }
 
 function DateNavigation({
@@ -299,11 +307,47 @@ function RecommendationAssessment({
   );
 }
 
-function DailyMenuList({ data }: { data: DayResponse }) {
+function RestaurantNotFoundPage({ date }: { date: string }) {
+  useEffect(() => {
+    document.title = "Ravintolaa ei löytynyt | Mihin lounaalle?";
+  }, []);
+
+  return (
+    <>
+      <AppHeader />
+      <main className="reader-main" id="main-content" tabIndex={-1}>
+        <section className="state-panel" aria-labelledby="missing-restaurant-title">
+          <h1 id="missing-restaurant-title">Ravintolaa ei löytynyt.</h1>
+          <p>Linkki voi olla virheellinen. Löydät muut ravintolat päivän lounaslistalta.</p>
+          <a className="button button-dark" href={dayHref(date)}>Palaa päivän lounaisiin</a>
+        </section>
+      </main>
+    </>
+  );
+}
+
+function DailyMenuList({
+  data,
+  query,
+  onQueryChange,
+}: {
+  data: DayResponse;
+  query: string;
+  onQueryChange: (query: string) => void;
+}) {
+  const searchInput = useRef<HTMLInputElement>(null);
+  const searchTerms = query.trim().toLocaleLowerCase("fi-FI").split(/\s+/).filter(Boolean);
   const recommendationByRestaurant = new Map(
     data.recommendations.map((recommendation) => [recommendation.restaurant.id, recommendation]),
   );
   const entries = data.menus
+    .filter(({ restaurant, menu }) => {
+      const searchableText = [
+        restaurant.name, restaurant.city, restaurant.address, menu.title, menu.text,
+        ...(menu.structuredMenu?.courses.map((course) => course.nameFi) ?? []),
+      ].filter(Boolean).join(" ").toLocaleLowerCase("fi-FI");
+      return searchTerms.every((term) => searchableText.includes(term));
+    })
     .map((entry) => ({
       entry,
       recommendation: recommendationByRestaurant.get(entry.restaurant.id),
@@ -316,14 +360,40 @@ function DailyMenuList({ data }: { data: DayResponse }) {
       if (second.recommendation) return 1;
       return first.entry.restaurant.name.localeCompare(second.entry.restaurant.name, "fi-FI");
     });
+  const recommendationCount = entries.filter(({ recommendation }) => recommendation).length;
 
   return (
     <section className="daily-menus" aria-labelledby="daily-menus-title">
+      <div className="menu-search" role="search" aria-label="Ruokalistojen haku">
+        <label htmlFor="menu-search">Hae ravintolaa, paikkakuntaa tai ruokaa</label>
+        <div className="menu-search-controls">
+          <input
+            aria-controls="daily-menu-results"
+            autoComplete="off"
+            id="menu-search"
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Esim. Ilmajoki tai lohikeitto"
+            ref={searchInput}
+            type="search"
+            value={query}
+          />
+          {query && (
+            <button className="button" type="button" onClick={() => {
+              onQueryChange("");
+              searchInput.current?.focus();
+            }}>
+              Tyhjennä haku
+            </button>
+          )}
+        </div>
+      </div>
       <header className="daily-menus-heading">
         <h2 className="visually-hidden" id="daily-menus-title">Kaikki ruokalistat</h2>
-        <p>
-          {entries.length} {entries.length === 1 ? "ravintola" : "ravintolaa"}
-          {data.recommendations.length > 0 && ` · ${data.recommendations.length} ${data.recommendations.length === 1 ? "suositus" : "suositusta"}`}
+        <p role="status" aria-atomic="true">
+          {searchTerms.length > 0
+            ? `${entries.length} / ${data.menus.length} ravintolaa`
+            : `${entries.length} ${entries.length === 1 ? "ravintola" : "ravintolaa"}`}
+          {recommendationCount > 0 && ` · ${recommendationCount} ${recommendationCount === 1 ? "suositus" : "suositusta"}`}
         </p>
         {data.recommendations.length > 0 && (
           <details className="assessment-method">
@@ -338,11 +408,16 @@ function DailyMenuList({ data }: { data: DayResponse }) {
 
       {data.status === "pending" && data.recommendations.length === 0 && (
         <div className="inline-state assessment-pending" role="status">
-          Menuarvioita muodostetaan. Ruokalistat ovat jo selattavissa.
+          Menuarviot eivät ole vielä saatavilla. Ruokalistat ovat jo selattavissa.
         </div>
       )}
 
-      <ul className="daily-menu-list">
+      {entries.length === 0 && (
+        <div className="inline-state empty-search-state">
+          <p><strong>Haulla ei löytynyt ruokalistoja.</strong> Kokeile toista hakusanaa tai tyhjennä haku.</p>
+        </div>
+      )}
+      <ul className="daily-menu-list" id="daily-menu-results">
         {entries.map(({ entry, recommendation }) => {
           const source = entry.menu.source ?? data.source;
           return (
@@ -371,8 +446,8 @@ function DailyMenuList({ data }: { data: DayResponse }) {
                       </strong>
                     )}
                   </div>
-                  {entry.restaurant.address && (
-                    <p className="restaurant-address">{entry.restaurant.address}</p>
+                  {restaurantAddress(entry.restaurant) && (
+                    <p className="restaurant-address">{restaurantAddress(entry.restaurant)}</p>
                   )}
                   {(entry.menu.lunchHours || entry.menu.priceText) && (
                     <p className="daily-menu-facts">
@@ -389,7 +464,7 @@ function DailyMenuList({ data }: { data: DayResponse }) {
                     {entry.restaurant.address && (
                       <a
                         className="text-link menu-route-link"
-                        href={mapHref(entry.restaurant.address)}
+                        href={mapHref(entry.restaurant)}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -423,12 +498,16 @@ function DailyMenuList({ data }: { data: DayResponse }) {
           );
         })}
       </ul>
+      {entries.some(({ entry }) => entry.menu.structuredMenu?.courses.length) && (
+        <MenuDataNotice />
+      )}
     </section>
   );
 }
 
 function DayPage({ browser }: { browser: BrowserAdapter }) {
   const [date, setDate] = useState(() => dayRouteDate(browser.location().search));
+  const [query, setQuery] = useState("");
   const [data, setData] = useState<DayResponse | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -501,16 +580,13 @@ function DayPage({ browser }: { browser: BrowserAdapter }) {
             )}
             {!(data.stale && data.lastSuccessfulFetchAt === null) && (
               <>
-                {data.menus.length > 0 && <DailyMenuList data={data} />}
+                {data.menus.length > 0 && <DailyMenuList data={data} query={query} onQueryChange={setQuery} />}
                 {data.menus.length === 0 && (
                   <div className="inline-state empty-day-state">
                     {data.status === "pending"
                       ? "Ruokalistoja odotetaan vielä. Voit selata muita päiviä yllä olevilla nuolilla."
                       : "Valitse toinen päivä yllä olevilla nuolilla."}
                   </div>
-                )}
-                {data.menus.some((entry) => entry.menu.structuredMenu?.courses.length) && (
-                  <MenuDataNotice />
                 )}
               </>
             )}
@@ -581,13 +657,13 @@ function RestaurantPage({
   const [selectedDate, setSelectedDate] = useState(initialState.selectedDate);
   const [data, setData] = useState<RestaurantWeekResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"not-found" | "request" | null>(null);
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    setError(false);
+    setError(null);
     fetchJson<RestaurantWeekResponse>(
       `/api/restaurants/${encodeURIComponent(restaurantId)}/weeks/${week}`,
       controller.signal,
@@ -598,7 +674,7 @@ function RestaurantPage({
       })
       .catch((requestError: unknown) => {
         if (!(requestError instanceof DOMException && requestError.name === "AbortError")) {
-          setError(true);
+          setError(requestError instanceof HttpError && requestError.status === 404 ? "not-found" : "request");
           setLoading(false);
         }
       });
@@ -653,6 +729,8 @@ function RestaurantPage({
       : `${data.restaurant.name}: viikolle ${formatShortDate(week)}–${formatShortDate(addDays(week, 6))} ei löytynyt ruokalistaa.`
     : "";
 
+  if (error === "not-found") return <RestaurantNotFoundPage date={selectedDate} />;
+
   return (
     <>
       <AppHeader />
@@ -669,11 +747,11 @@ function RestaurantPage({
               <div>
                 <h1>{data.restaurant.name}</h1>
                 <div className="restaurant-meta">
-                  {data.restaurant.address && <span>{data.restaurant.address}</span>}
+                  {restaurantAddress(data.restaurant) && <span>{restaurantAddress(data.restaurant)}</span>}
                   {data.restaurant.phone && <a href={`tel:${data.restaurant.phone}`}>{data.restaurant.phone}</a>}
                   {data.restaurant.address && (
                     <a
-                      href={mapHref(data.restaurant.address)}
+                      href={mapHref(data.restaurant)}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -838,6 +916,9 @@ function AdminRoute({ browser }: { browser: BrowserAdapter }) {
 export function App({ browser = browserAdapter }: { browser?: BrowserAdapter }) {
   const route = appRoute(browser.location().pathname);
   if (route.kind === "admin") return <AdminRoute browser={browser} />;
+  if (route.kind === "restaurant-not-found") {
+    return <RestaurantNotFoundPage date={dayRouteDate(browser.location().search)} />;
+  }
   if (route.kind === "restaurant") {
     return <RestaurantPage browser={browser} restaurantId={route.restaurantId} />;
   }

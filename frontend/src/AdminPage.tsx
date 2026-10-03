@@ -136,14 +136,17 @@ function AdminDashboard({
   onLogout,
   onRefresh,
   onSessionExpired,
+  onSourceUrlChange,
+  sourceUrl,
 }: {
   data: AdminOverview;
   error: string | null;
   onLogout: () => Promise<void>;
   onRefresh: () => Promise<void>;
   onSessionExpired: () => void;
+  onSourceUrlChange: (url: string) => void;
+  sourceUrl: string;
 }) {
-  const [url, setUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
@@ -164,6 +167,11 @@ function AdminDashboard({
     (assessment) => assessment.serviceDate === selectedAssessmentDate,
   );
   const busy = adding || loggingOut || refreshing || savingAssessmentId !== null;
+  const needsAttention = Boolean(
+    data.refresh.lastError
+    || data.sources.some((source) => source.enabled && source.lastError)
+    || (data.latestFetch.outcome && data.latestFetch.outcome !== "success"),
+  );
 
   useEffect(() => {
     if (!assessmentDates.includes(selectedAssessmentDate)) {
@@ -178,11 +186,11 @@ function AdminDashboard({
     setSourceMessage(null);
     try {
       await adminRequest("/api/admin/sources", {
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: sourceUrl }),
         headers: { "content-type": "application/json" },
         method: "POST",
       });
-      setUrl("");
+      onSourceUrlChange("");
       setSourceMessage("Lähde lisättiin ja ruokalista haettiin.");
       await onRefresh();
     } catch (error) {
@@ -191,6 +199,9 @@ function AdminDashboard({
         return;
       }
       setSourceError(error instanceof Error ? error.message : "Lähteen lisäys epäonnistui.");
+      if (error instanceof AdminRequestError && error.status === 422) {
+        await onRefresh();
+      }
     } finally {
       setAdding(false);
     }
@@ -272,6 +283,13 @@ function AdminDashboard({
         </div>
       </section>
 
+      <nav className="admin-section-nav" aria-label="Ylläpidon osiot">
+        <a href="#calibration-title">Arviot</a>
+        <a href="#source-add-title">Lisää lähde</a>
+        <a href="#sources-title">Lisätyt ravintolat</a>
+        <a href="#errors-title">Keräysvirheet</a>
+      </nav>
+
       <section
         aria-busy={data.refresh.running || refreshing}
         aria-label="Palvelun tila"
@@ -279,8 +297,8 @@ function AdminDashboard({
         className="admin-status-strip"
       >
         <div>
-          <span aria-hidden="true" className={`status-dot ${data.refresh.running ? "status-dot-running" : data.refresh.lastError ? "status-dot-error" : "status-dot-ok"}`} />
-          <strong>{data.refresh.running ? "Keräys käynnissä" : data.refresh.lastError ? "Keräys vaatii huomiota" : "Palvelu valmiina"}</strong>
+          <span aria-hidden="true" className={`status-dot ${data.refresh.running ? "status-dot-running" : needsAttention ? "status-dot-error" : "status-dot-ok"}`} />
+          <strong>{data.refresh.running ? "Keräys käynnissä" : needsAttention ? "Keräys vaatii huomiota" : "Palvelu valmiina"}</strong>
         </div>
         <span>Arviointi {data.openAiConfigured ? "käytössä" : "ei käytössä"}</span>
         <span>Päivitetty {formatUpdatedAt(data.generatedAt)}</span>
@@ -307,7 +325,7 @@ function AdminDashboard({
 
       <section className="admin-panel admin-wide-panel" aria-labelledby="calibration-title">
         <div className="admin-section-heading admin-calibration-heading">
-          <h2 id="calibration-title">Arvioiden kalibrointi</h2>
+          <h2 id="calibration-title" tabIndex={-1}>Arvioiden kalibrointi</h2>
           <div className="admin-calibration-toolbar">
             <label htmlFor="assessment-date">Lounaspäivä</label>
             <select
@@ -429,7 +447,7 @@ function AdminDashboard({
 
       <div className="admin-layout">
         <section className="admin-panel" aria-labelledby="source-add-title">
-          <h2 id="source-add-title">Lisää ruokalistasivu</h2>
+          <h2 id="source-add-title" tabIndex={-1}>Lisää ruokalistasivu</h2>
           <p>Anna ravintolan julkinen ruokalistasivu. Ruokalistan pitää näkyä sivun tekstissä ilman kirjautumista. PDF-tiedostoja tai vasta sivun avaamisen jälkeen latautuvia ruokalistoja ei voida lukea.</p>
           <form className="admin-form" onSubmit={addSource}>
             <label htmlFor="menu-source-url">Ravintolan ruokalistasivu</label>
@@ -441,14 +459,14 @@ function AdminDashboard({
               id="menu-source-url"
               inputMode="url"
               maxLength={2048}
-              onChange={(event) => setUrl(event.target.value)}
+              onChange={(event) => onSourceUrlChange(event.target.value)}
               pattern="https://.*"
               placeholder="https://ravintola.fi/lounas/"
               required
               spellCheck={false}
               title="Anna täydellinen HTTPS-osoite."
               type="url"
-              value={url}
+              value={sourceUrl}
             />
             <small className="field-hint" id="menu-source-hint">
               Osoitteen pitää alkaa https:// ja olla enintään 2048 merkkiä.
@@ -482,7 +500,7 @@ function AdminDashboard({
 
       <section className="admin-panel admin-wide-panel" aria-labelledby="sources-title">
         <div className="admin-section-heading">
-          <h2 id="sources-title">Lisätyt ravintolat</h2>
+          <h2 id="sources-title" tabIndex={-1}>Lisätyt ravintolat</h2>
           <span>{data.sources.length} {data.sources.length === 1 ? "lähde" : "lähdettä"}</span>
         </div>
         {data.sources.length === 0 ? (
@@ -518,7 +536,7 @@ function AdminDashboard({
 
       <section className="admin-panel admin-wide-panel" aria-labelledby="errors-title">
         <div className="admin-section-heading">
-          <h2 id="errors-title">Viimeisimmät keräysvirheet</h2>
+          <h2 id="errors-title" tabIndex={-1}>Viimeisimmät keräysvirheet</h2>
           <span>Enintään 20</span>
         </div>
         {data.errors.length === 0 ? (
@@ -558,6 +576,7 @@ export function AdminPage() {
   const [mode, setMode] = useState<"disabled" | "error" | "loading" | "login" | "ready">("loading");
   const [data, setData] = useState<AdminOverview | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [sourceUrl, setSourceUrl] = useState("");
 
   async function loadOverview(signal?: AbortSignal, unauthorizedMessage?: string) {
     try {
@@ -613,6 +632,7 @@ export function AdminPage() {
       await adminRequest("/api/admin/logout", { method: "POST" });
       setData(null);
       setMessage(null);
+      setSourceUrl("");
       setMode("login");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Uloskirjautuminen epäonnistui.");
@@ -652,6 +672,8 @@ export function AdminPage() {
           onLogout={logout}
           onRefresh={loadOverview}
           onSessionExpired={sessionExpired}
+          onSourceUrlChange={setSourceUrl}
+          sourceUrl={sourceUrl}
         />
       )}
     </>

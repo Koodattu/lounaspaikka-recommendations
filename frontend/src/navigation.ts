@@ -28,16 +28,21 @@ export const browserAdapter: BrowserAdapter = {
 export type AppRoute =
   | { kind: "admin" }
   | { kind: "day" }
+  | { kind: "restaurant-not-found" }
   | { kind: "restaurant"; restaurantId: string };
 
 export function appRoute(pathname: string): AppRoute {
   if (pathname === "/admin" || pathname === "/admin/") return { kind: "admin" };
   const restaurantMatch = pathname.match(/^\/ravintolat\/([^/]+)\/?$/);
   if (restaurantMatch?.[1]) {
-    return {
-      kind: "restaurant",
-      restaurantId: decodeURIComponent(restaurantMatch[1]),
-    };
+    try {
+      return {
+        kind: "restaurant",
+        restaurantId: decodeURIComponent(restaurantMatch[1]),
+      };
+    } catch {
+      return { kind: "restaurant-not-found" };
+    }
   }
   return { kind: "day" };
 }

@@ -23,6 +23,32 @@ function json(payload: unknown, status = 200) {
 describe("admin recovery", () => {
   beforeEach(() => vi.restoreAllMocks());
 
+  it("keeps a source draft through session expiry and sign-in, then clears it on explicit logout", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(overview))
+      .mockResolvedValueOnce(json({}, 401))
+      .mockResolvedValueOnce(json({ status: "ok" }))
+      .mockResolvedValueOnce(json(overview))
+      .mockResolvedValueOnce(json({ status: "ok" }))
+      .mockResolvedValueOnce(json({ status: "ok" }))
+      .mockResolvedValueOnce(json(overview));
+    render(<AdminPage />);
+    fireEvent.change(await screen.findByLabelText("Ravintolan ruokalistasivu"), {
+      target: { value: "https://example.com/draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Lisää ja hae ruokalista" }));
+    fireEvent.change(await screen.findByLabelText("Salasana"), { target: { value: "test-password" } });
+    expect(screen.getByRole("alert").textContent).toContain("Istunto vanheni");
+    fireEvent.click(screen.getByRole("button", { name: "Kirjaudu" }));
+    const restored = await screen.findByLabelText("Ravintolan ruokalistasivu") as HTMLInputElement;
+    expect(restored.value).toBe("https://example.com/draft");
+    fireEvent.click(screen.getByRole("button", { name: "Kirjaudu ulos" }));
+    fireEvent.change(await screen.findByLabelText("Salasana"), { target: { value: "test-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Kirjaudu" }));
+    expect((await screen.findByLabelText("Ravintolan ruokalistasivu") as HTMLInputElement).value).toBe("");
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/admin/sources")).toHaveLength(1);
+  });
+
   it("preserves the dashboard and source draft after a failed refresh, then recovers", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(json(overview))
@@ -39,6 +65,33 @@ describe("admin recovery", () => {
     fireEvent.click(screen.getByRole("button", { name: "Päivitä tiedot" }));
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("refreshes persisted source diagnostics after processing fails and keeps the URL editable", async () => {
+    const failedOverview: AdminOverview = {
+      ...overview,
+      sources: [{
+        createdAt: overview.generatedAt, enabled: true, id: 1,
+        lastError: "Ruokalistaa ei voitu poimia sivulta.", lastOutcome: "extraction_error",
+        lastRunAt: overview.generatedAt, restaurantName: null, url: "https://example.com/draft",
+      }],
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json(overview))
+      .mockResolvedValueOnce(json({ error: { message: "Lähteen käsittely epäonnistui. Tarkista virhe yhteenvedosta." } }, 422))
+      .mockResolvedValueOnce(json(failedOverview));
+    render(<AdminPage />);
+    const source = await screen.findByLabelText("Ravintolan ruokalistasivu") as HTMLInputElement;
+    fireEvent.change(source, { target: { value: "https://example.com/draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Lisää ja hae ruokalista" }));
+    expect(await screen.findByText("Poiminta epäonnistui")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Lähteen käsittely epäonnistui");
+    expect(source.value).toBe("https://example.com/draft");
+    expect(source.disabled).toBe(false);
+    expect(screen.getByText("Keräys vaatii huomiota")).toBeTruthy();
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/admin/overview", "/api/admin/sources", "/api/admin/overview",
+    ]);
   });
 
   it("keeps a failed login editable and describes its error in Finnish", async () => {

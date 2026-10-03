@@ -41,6 +41,16 @@ export interface RecommendationPublication {
 export function createRecommendationPublication(
   options: RecommendationPublicationOptions,
 ): RecommendationPublication {
+  let pending: Promise<unknown> = Promise.resolve();
+
+  function runExclusive<T>(run: () => Promise<T>): Promise<T> {
+    // Scheduled and admin runs share immutable assessments and extraction history.
+    // Finish one publication before another checks which revisions are unseen.
+    const result = pending.then(run);
+    pending = result.catch(() => undefined);
+    return result;
+  }
+
   async function assessDates(
     serviceDates: string[],
     budget: OpenAiRequestBudget,
@@ -70,21 +80,25 @@ export function createRecommendationPublication(
   }
 
   return {
-    async addCustomSource(url, serviceDates) {
-      if (!options.customSources) {
-        throw new Error("Custom source publication is not configured");
-      }
-      const budget = new OpenAiRequestBudget(options.adminRequestBudget);
-      const source = await options.customSources.addAndCrawl(url, serviceDates, budget);
-      return {
-        outcome: await assessDates(serviceDates, budget),
-        source,
-      };
+    addCustomSource(url, serviceDates) {
+      return runExclusive(async () => {
+        if (!options.customSources) {
+          throw new Error("Custom source publication is not configured");
+        }
+        const budget = new OpenAiRequestBudget(options.adminRequestBudget);
+        const source = await options.customSources.addAndCrawl(url, serviceDates, budget);
+        return {
+          outcome: await assessDates(serviceDates, budget),
+          source,
+        };
+      });
     },
-    async runScheduled(serviceDates) {
-      const budget = new OpenAiRequestBudget(options.refreshRequestBudget);
-      await options.customSources?.crawlAll(serviceDates, budget);
-      return assessDates(serviceDates, budget);
+    runScheduled(serviceDates) {
+      return runExclusive(async () => {
+        const budget = new OpenAiRequestBudget(options.refreshRequestBudget);
+        await options.customSources?.crawlAll(serviceDates, budget);
+        return assessDates(serviceDates, budget);
+      });
     },
   };
 }

@@ -17,7 +17,7 @@ describe("navigation", () => {
       restaurantId: "Vinola Keskusta",
     });
     expect(appRoute("/tuntematon")).toEqual({ kind: "day" });
-    expect(() => appRoute("/ravintolat/%E0%A4%A")).toThrow(URIError);
+    expect(appRoute("/ravintolat/%E0%A4%A")).toEqual({ kind: "restaurant-not-found" });
   });
 
   it("parses day and restaurant query state with the existing precedence", () => {

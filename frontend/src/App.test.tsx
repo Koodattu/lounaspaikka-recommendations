@@ -130,6 +130,89 @@ describe("reader app", () => {
     vi.restoreAllMocks();
   });
 
+  it("recovers from a malformed restaurant link without crashing or requesting data", () => {
+    window.history.replaceState({}, "", "/ravintolat/%E0%A4%A?date=2026-07-14");
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    render(<App />);
+    expect(screen.getByRole("heading", { name: "Ravintolaa ei löytynyt." })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Palaa päivän lounaisiin" }).getAttribute("href"))
+      .toBe("/?date=2026-07-14");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("explains a missing restaurant and returns to the selected day instead of retrying a 404", async () => {
+    window.history.replaceState({}, "", "/ravintolat/missing?date=2026-07-14");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 404 }));
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Ravintolaa ei löytynyt." })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Palaa päivän lounaisiin" }).getAttribute("href"))
+      .toBe("/?date=2026-07-14");
+    expect(screen.queryByRole("button", { name: "Yritä uudelleen" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Viikon valinta" })).toBeNull();
+  });
+
+  it.each(["day", "week"])("includes the town in the %s view and its directions link", async (view) => {
+    const localRestaurant = { ...restaurant, address: "Keskuskatu 10", city: "Ilmajoki" };
+    const response = view === "day" ? {
+      ...dayResponse, recommendations: [],
+      menus: [{ ...dayResponse.menus[0], restaurant: localRestaurant }],
+    } : {
+      restaurant: { ...localRestaurant, description: null, openingHours: [] },
+      source: dayResponse.source, weekStart: "2026-07-13", weekEnd: "2026-07-19",
+      days: [{ ...menu, serviceDate: "2026-07-14", fetchedAt: dayResponse.lastSuccessfulFetchAt }],
+    };
+    if (view === "week") window.history.replaceState({}, "", "/ravintolat/vinola?date=2026-07-14");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(response)));
+    render(<App />);
+    expect(await screen.findByText("Keskuskatu 10, Ilmajoki")).toBeTruthy();
+    const route = screen.getByRole("link", { name: /(?:Reitti|Avaa reitti).*avautuu/ });
+    expect(new URL(route.getAttribute("href")!).searchParams.get("destination"))
+      .toBe("Keskuskatu 10, Ilmajoki");
+  });
+
+  it("finds menus by restaurant, town, and dish and recovers from no matches without fetching again", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      ...dayResponse,
+      menus: dayResponse.menus.map((entry, index) => index === 1
+        ? { ...entry, restaurant: { ...entry.restaurant, city: "Ilmajoki", address: "Puistotie 2" } }
+        : entry),
+    })));
+    render(<App />);
+    const search = await screen.findByRole("searchbox", { name: "Hae ravintolaa, paikkakuntaa tai ruokaa" });
+    const results = screen.getByRole("region", { name: "Kaikki ruokalistat" });
+    for (const term of [" KASVISravintola ", "Ilmajoki", "kasviscurry", "ILMAJOKI curry"]) {
+      fireEvent.change(search, { target: { value: term } });
+      expect(within(results).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent))
+        .toEqual(["Kasvisravintola"]);
+      expect(within(results).getByText("Kasviscurry")).toBeTruthy();
+      expect(within(results).getByRole("img", { name: "Sija 2" })).toBeTruthy();
+    }
+    fireEvent.change(search, { target: { value: "ei-olemassa" } });
+    expect(within(results).queryByRole("heading", { level: 3 })).toBeNull();
+    expect(within(results).getByText("Haulla ei löytynyt ruokalistoja.")).toBeTruthy();
+    expect(screen.queryByRole("complementary", { name: "Ruokavaliotietojen turvallisuus" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tyhjennä haku" }));
+    expect(document.activeElement).toBe(search);
+    expect(within(results).getAllByRole("heading", { level: 3 })).toHaveLength(3);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the menu search when changing the date and retrying a failed request", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify(dayResponse)))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...dayResponse, serviceDate: "2026-07-15" })));
+    render(<App />);
+    fireEvent.change(await screen.findByRole("searchbox"), { target: { value: "curry" } });
+    fireEvent.click(screen.getByRole("button", { name: "Seuraava päivä" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yritä uudelleen" }));
+    expect((await screen.findByRole("searchbox") as HTMLInputElement).value).toBe("curry");
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent))
+      .toEqual(["Kasvisravintola"]);
+    expect(screen.getByRole("link", { name: "Viikon ruokalista" }).getAttribute("href"))
+      .toBe("/ravintolat/kasvis?week=2026-07-13&date=2026-07-15");
+  });
+
   it.each(["pending", "ready", "unavailable"])("provides a recovery path for an empty %s day", async (status) => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       ...dayResponse, menus: [], recommendations: [], status,
@@ -290,7 +373,7 @@ describe("reader app", () => {
     const { unmount } = render(<App />);
     expect(await screen.findByRole("heading", { name: "Päivän lounaat" })).toBeTruthy();
     expect(
-      await screen.findByText("Menuarvioita muodostetaan. Ruokalistat ovat jo selattavissa."),
+      await screen.findByText("Menuarviot eivät ole vielä saatavilla. Ruokalistat ovat jo selattavissa."),
     ).toBeTruthy();
     expect(screen.getByText("Ruokalistojen päivitys viivästyi.")).toBeTruthy();
     expect(screen.getByText("Näytämme viimeksi onnistuneesti haetut tiedot.")).toBeTruthy();

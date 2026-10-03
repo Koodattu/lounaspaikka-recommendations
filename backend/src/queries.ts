@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 
 import {
   getDailyOfferingSnapshot,
+  getDailyOfferingSnapshots,
   type DailyOfferingSnapshotEntry,
 } from "./daily-offering-snapshot.js";
 import { addDays } from "./dates.js";
@@ -394,21 +395,29 @@ export function getRestaurantWeek(
     .get(restaurantId) as RestaurantRow | undefined;
   if (!restaurant) return null;
 
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const serviceDate = addDays(weekStart, index);
-    const observed = getDayMenus(db, serviceDate, versionOverrides).find(
-      (menu) => menu.restaurant.id === restaurantId,
-    );
+  const snapshots = getDailyOfferingSnapshots(
+    db,
+    Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
+    restaurantId,
+  );
+  const structuredMenus = structuredMenusFor(
+    db,
+    snapshots.flatMap((snapshot) => snapshot.entries.map((entry) => entry.revisionId)),
+    { ...defaultRecommendationVersions, ...versionOverrides },
+  );
+  const days = snapshots.map(({ serviceDate, entries }) => {
+    const observed = entries[0];
+    const menu = observed ? menuFor(observed, structuredMenus.get(observed.revisionId) ?? null) : null;
     return {
       fetchedAt: observed?.fetchedAt ?? null,
-      lunchHours: observed?.menu.lunchHours ?? null,
-      priceText: observed?.menu.priceText ?? null,
+      lunchHours: menu?.lunchHours ?? null,
+      priceText: menu?.priceText ?? null,
       serviceDate,
-      source: observed?.menu.source ?? null,
-      status: observed?.menu.status ?? "missing",
-      structuredMenu: observed?.menu.structuredMenu ?? null,
-      text: observed?.menu.text ?? null,
-      title: observed?.menu.title ?? null,
+      source: menu?.source ?? null,
+      status: menu?.status ?? "missing",
+      structuredMenu: menu?.structuredMenu ?? null,
+      text: menu?.text ?? null,
+      title: menu?.title ?? null,
     };
   });
 

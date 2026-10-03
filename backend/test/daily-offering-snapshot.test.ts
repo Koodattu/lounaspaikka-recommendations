@@ -3,6 +3,7 @@ import type Database from "better-sqlite3";
 
 import { getDailyOfferingSnapshot } from "../src/daily-offering-snapshot.js";
 import { openDatabase } from "../src/database.js";
+import { getRestaurantWeek } from "../src/queries.js";
 import {
   persistFailedFetch,
   persistSuccessfulFetch,
@@ -85,11 +86,28 @@ describe("Daily offering snapshot", () => {
       fetchedAt: "2026-07-14T03:00:00.000Z",
       offering: { menuText: "Kasviscurry" },
     });
+    const week = getRestaurantWeek(db, "main", "2026-07-13");
+    expect(week?.days).toHaveLength(7);
+    expect(week?.days[0]).toMatchObject({ serviceDate: "2026-07-13", status: "missing" });
+    expect(week?.days[1]).toMatchObject({
+      fetchedAt: "2026-07-14T03:00:00.000Z",
+      serviceDate,
+      status: "published",
+      text: "Kasviscurry",
+    });
+    expect(getRestaurantWeek(db, "custom:1", "2026-07-13")?.days[1]).toMatchObject({
+      source: { name: "Oma ravintola", url: "https://example.com/menu" },
+      text: "Lohikeitto",
+    });
 
     db.prepare("UPDATE custom_sources SET enabled = 0 WHERE id = ?").run(customSourceId);
     expect(
       getDailyOfferingSnapshot(db, serviceDate).entries.map((entry) => entry.restaurant.id),
     ).toEqual(["main"]);
+    expect(getRestaurantWeek(db, "custom:1", "2026-07-13")?.days[1]).toMatchObject({
+      status: "missing",
+      text: null,
+    });
 
     persistSuccessfulFetch({
       db,
@@ -103,6 +121,22 @@ describe("Daily offering snapshot", () => {
     expect(getDailyOfferingSnapshot(db, serviceDate).entries[0]).toMatchObject({
       fetchedAt: "2026-07-14T05:00:00.000Z",
       offering: { menuText: "Paahdettua kuhaa" },
+    });
+    expect(getRestaurantWeek(db, "main", "2026-07-13")?.days[1]?.text).toBe("Paahdettua kuhaa");
+
+    persistSuccessfulFetch({
+      db,
+      finishedAt: "2026-07-14T06:00:00.000Z",
+      offerings: [],
+      request: { serviceDate },
+      responseHash: "main-empty",
+      serviceDate,
+      startedAt: "2026-07-14T05:59:00.000Z",
+    });
+    expect(getRestaurantWeek(db, "main", "2026-07-13")?.days[1]).toMatchObject({
+      fetchedAt: null,
+      status: "missing",
+      text: null,
     });
   });
 });

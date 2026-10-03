@@ -2,7 +2,7 @@
 
 A small Finnish lunch recommendation service for the Seinäjoki area. It collects every restaurant returned by Lounaspaikka within 50 kilometres of the fixed centre point, preserves menu revisions in SQLite, and publishes one shared daily top three.
 
-The first version is intentionally narrow: no user accounts, personalization, queues, or separate database service. It has one password-protected operational admin screen.
+The first version is intentionally narrow: no user accounts, personalization, separate job queue, or separate database service. It has one password-protected operational admin screen.
 
 ## How it works
 
@@ -11,9 +11,11 @@ The first version is intentionally narrow: no user accounts, personalization, qu
 - Identical menus create a new freshness observation, not a duplicate revision. Changed menus remain available as immutable history.
 - When `OPENAI_API_KEY` is set, it extracts custom menu pages and assesses only unseen menu revisions. The model sees menu facts without restaurant identity and returns four conservatively calibrated 0–10 scores plus one short Finnish recommendation rationale.
 - OpenAI calls have separate hard request budgets for each startup/scheduled refresh and each admin source-add action. Cached custom-page extractions do not consume budget, and setting a budget to zero blocks calls for that operation.
+- Scheduled publication and admin source addition run one at a time within the backend process to avoid assessing the same unseen revision twice. A source-add request can wait for the current publication; reader requests remain available.
 - Ranking is deterministic: appeal 35%, distinctiveness 25%, variety 20%, and value 20%. Assessments without an actual extracted lunch course are excluded; ties are ordered by restaurant ID.
 - The admin can label recent immutable assessments as too high or too low. Labels are stored for shared-profile calibration and never act as hidden restaurant penalties or immediate ranking overrides.
 - The reader UI is Finnish. OpenAI instructions and all code are English; model rationales are Finnish.
+- Readers can search the selected day's full menus by restaurant, town, address, or dish. Search preserves the shared ranking and stays applied when changing dates.
 
 ## Run with Docker Compose
 
@@ -59,6 +61,25 @@ npm run dev -w frontend
 ```
 
 The backend defaults to `data/lunch.sqlite` and port 3000. Vite proxies `/api` to it.
+
+### Isolated synthetic preview
+
+To review reader and admin journeys without external collection or model calls, use the in-memory preview instead of the normal backend:
+
+```sh
+npm run build -w backend
+node work/goal-improvement/preview.mjs
+```
+
+In a second terminal:
+
+```sh
+npm run dev -w frontend -- --host 127.0.0.1 --strictPort
+```
+
+Open [the fixture day](http://127.0.0.1:5173/?date=2026-10-03). The fixture has 32 fictional restaurants for 28 September–4 October 2026. At `/admin`, use `local-preview-only-password`. Source URLs ending in `/failure` simulate failed extraction; other URLs add a synthetic menu without fetching the URL. Stop both commands with Ctrl+C; restarting the preview resets its database.
+
+Run `node work/goal-improvement/benchmark.mjs` after building the backend to repeat the isolated read benchmark. Measurements, verification details, and screenshots are in [the improvement work log](work/goal-improvement/STATE.md).
 
 ## Reader API
 

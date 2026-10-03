@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 
-import type { CustomSourceService } from "../src/custom-sources.js";
+import { createCustomSourceService, type CustomSourceService } from "../src/custom-sources.js";
 import { openDatabase } from "../src/database.js";
 import { persistSuccessfulFetch, type StoredOffering } from "../src/offering-store.js";
 import { createRecommendationPublication } from "../src/recommendation-publication.js";
@@ -56,6 +56,47 @@ describe("Recommendation publication run", () => {
 
   afterEach(() => db?.close());
 
+  it("publishes overlapping scheduled and source-add runs without duplicate assessments or failed dates", async () => {
+    db = openDatabase(":memory:");
+    const serviceDate = "2026-07-14";
+    persistDate(db, serviceDate);
+    let signalStarted!: () => void;
+    let releaseAssessment!: () => void;
+    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    const release = new Promise<void>((resolve) => { releaseAssessment = resolve; });
+    const assess = vi.fn(async (facts: { menuText: string }) => {
+      signalStarted();
+      await release;
+      return assessment(facts.menuText);
+    });
+    const customSources = createCustomSourceService({
+      db, model: "test",
+      fetchPage: async (url) => ({ body: "fixture", text: "Kasviskeitto", finalUrl: url, httpStatus: 200, truncated: false }),
+      extractor: async () => ({ extraction: {
+        pageType: "restaurant_page",
+        restaurant: { name: "Testikeittiö", address: null, city: null, description: null, phone: null, openingHours: [] },
+        menus: [{ serviceDate, status: "published", menuText: "Kasviskeitto", lunchHours: null, priceText: null, title: null }],
+      } }),
+    });
+    const publication = createRecommendationPublication({
+      db, assessor: { assess }, customSources, versions: {},
+      adminRequestBudget: 5, refreshRequestBudget: 5,
+    });
+    const scheduled = publication.runScheduled([serviceDate]);
+    await started;
+    const added = publication.addCustomSource("https://example.com/menu", [serviceDate]);
+    // Allow the second caller to reach the pending provider call, if not coordinated.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    releaseAssessment();
+    const [scheduledResult, addedResult] = await Promise.all([scheduled, added]);
+    expect(scheduledResult.dates).toMatchObject([{ serviceDate, status: "succeeded" }]);
+    expect(addedResult.outcome.dates[0]).not.toHaveProperty("error");
+    expect(addedResult.outcome.dates).toMatchObject([{ serviceDate, status: "succeeded" }]);
+    expect(assess.mock.calls.map(([facts]) => facts.menuText)).toEqual([
+      "Lounas 2026-07-14", "Kasviskeitto",
+    ]);
+  });
+
   it("returns every date outcome and continues after an assessment failure", async () => {
     db = openDatabase(":memory:");
     const serviceDates = ["2026-07-14", "2026-07-15"];
@@ -86,6 +127,25 @@ describe("Recommendation publication run", () => {
       { serviceDate: "2026-07-14", status: "failed" },
       { serviceDate: "2026-07-15", status: "succeeded" },
     ]);
+  });
+
+  it("continues queued publication after a source-add request rejects", async () => {
+    db = openDatabase(":memory:");
+    persistDate(db, "2026-07-14");
+    const publication = createRecommendationPublication({
+      db,
+      assessor: { assess: async (facts) => assessment(facts.menuText) },
+      customSources: createCustomSourceService({
+        db, model: "test",
+        fetchPage: async () => { throw new Error("Source unavailable"); },
+        extractor: async () => { throw new Error("Extraction must not run"); },
+      }),
+      adminRequestBudget: 1, refreshRequestBudget: 1, versions: {},
+    });
+    const failed = publication.addCustomSource("https://example.com/menu", ["2026-07-14"]);
+    const scheduled = publication.runScheduled(["2026-07-14"]);
+    await expect(failed).rejects.toThrow("Source unavailable");
+    expect((await scheduled).dates).toMatchObject([{ serviceDate: "2026-07-14", status: "succeeded" }]);
   });
 
   it("shares the admin run budget between extraction and assessment", async () => {

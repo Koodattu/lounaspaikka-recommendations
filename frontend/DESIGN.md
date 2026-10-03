@@ -136,7 +136,7 @@ components:
 
 Keskipäivän opaste treats the interface like a well-designed local wayfinding system at noon: crisp, direct, grounded, and high-signal. It preserves the established clay, green, and neutral identity, but every visual decision must help a Finnish-speaking reader choose lunch in under a minute.
 
-The reader surface is mobile-first and composed for fast scanning: the current date and every restaurant's complete menu must be obvious without study. Ranking, score, and rationale annotate that shared menu list instead of replacing it with a separate recommendation surface. Desktop adds breadth, not a different hierarchy. The admin surface uses the same palette and components at a denser rhythm, with the editorial serif removed from operational labels, controls, and data.
+The reader surface is mobile-first and composed for fast scanning: the current date, main-course highlights, price and overall score must be obvious without study. Complete source menus remain accessible through compact disclosures. Desktop aligns restaurant facts, meals and rationale in three columns. The admin surface uses the same palette and components at a denser rhythm, with the editorial serif removed from operational labels, controls, and data.
 
 This system explicitly rejects the food-delivery marketplace, the generic SaaS dashboard, and the “AI-powered” novelty product. Recommendations earn trust through visible criteria, sources, freshness, and honest states; the underlying AI stays backstage.
 
@@ -250,17 +250,17 @@ Components feel aligned, compact, and touchable. They reuse a small vocabulary a
 ### Navigation
 
 - **Style:** a quiet header with the local mark, a full-width divider, and no decorative navigation. The date navigator is the primary wayfinding control: one aligned row, 46px arrow targets, a sentence-case context label, and a tabular date.
-- **Mobile treatment:** the date navigator spans the content width and precedes the decision headline, establishing date context before the recommendation; secondary catchment metadata may collapse, but the date and next/previous actions never do.
+- **Daily controls:** the date itself is the page heading; desktop search sits alongside it. Sort and diet controls share the next row with date-picker and sharing actions. Mobile wraps into full-width date/search rows and paired filters, with date-picker and share together. Avoid a duplicate daily title.
 - **Within a restaurant week:** seven named day buttons precede the selected menu. Route Green, an underline, and `aria-pressed` identify the selection. Buttons wrap at narrow widths or enlarged text; the other full menus remain below for comparison.
 - **Return from detail:** the dated return link restores the corresponding visible restaurant heading after the list loads. Its focus outline and native scrolling preserve comparison position without moving focus on ordinary entry or search changes.
 
 ### Recommendation Wayfinder
 
-The daily view is one calm restaurant list ordered with the top three first. Every row shows the restaurant facts and complete published menu using the same structure. Recommended rows add a compact rank, total score, visible rationale, and four component scores; they never truncate the food to manufacture a highlight. A route action and the weekly restaurant view remain quieter handoffs.
+The daily view ranks every assessed restaurant by score, with unassessed menus after them. Each row uses the same structure: restaurant/address, prominent price and lunch hours; up to three representative main courses; one overall score and its rationale. Show explicit vegetarian/vegan mains and included coffee as concise facts. Side dishes remain in the full-menu disclosure. Whole course names are retained. Price sorting compares the cheapest stated adult lunch, with unknowns last; rank numbers still describe the overall daily score ranking.
 
-The first recommendation's rationale uses solid Route Green with Light on Dark text. Other rationales use a simple divider on the page surface. Native disclosure markers distinguish expandable source text and explanations. Daily navigation and standalone links retain a 46px minimum target height.
+The highest-ranked restaurant's rationale uses solid Route Green with Light on Dark text. Its containing row has 24px desktop / 16px mobile horizontal padding, so the rationale never touches the row edges. Other rationales use a simple divider on the page surface. Native disclosures expose full source menus and assessment criteria. Routine freshness appears in the footer; failed updates retain their source-specific warnings. Component scores belong in admin, not in reader rows. Daily navigation targets are 46px; row links and disclosures are at least 44px.
 
-**The One Decision Rule.** The current date, leading recommendation, its score, and the beginning of its complete menu must be identifiable in the first mobile viewport without relying on animation.
+**The One Decision Rule.** The current date, leading restaurant, price and main-course highlights should be visible quickly, with one score and rationale close to each choice. Source failures remain visible even when their warning uses additional space.
 
 ### Safety and Status
 

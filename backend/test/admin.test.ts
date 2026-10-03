@@ -129,7 +129,7 @@ describe("admin API", () => {
         revision_id, profile_version, rubric_version, prompt_version,
         schema_version, model, scores_json, total_score, rationale_fi,
         structured_menu_json, assessed_at
-      ) VALUES (?, 'shared-v1', 'v2', 'v5', 'v4', 'test-model', ?, 9.9,
+      ) VALUES (?, 'shared-v1', 'v2', 'v6', 'v5', 'test-model', ?, 9.9,
         'Vanha arvio ei kuulu kalibrointiin.', ?, ?)`,
     ).run(
       staleRevision.lastInsertRowid,
@@ -158,7 +158,7 @@ describe("admin API", () => {
         revision_id, profile_version, rubric_version, prompt_version,
         schema_version, model, scores_json, total_score, rationale_fi,
         structured_menu_json, assessed_at
-      ) VALUES (?, 'shared-v1', 'v2', 'v5', 'v4', 'test-model', ?, 0, ?, ?, ?)`,
+      ) VALUES (?, 'shared-v1', 'v2', 'v6', 'v5', 'test-model', ?, 0, ?, ?, ?)`,
     ).run(
       revision.lastInsertRowid,
       JSON.stringify({ appeal: 0, distinctiveness: 0, value: 0, variety: 0 }),
@@ -212,7 +212,7 @@ describe("admin API", () => {
           revision_id, profile_version, rubric_version, prompt_version,
           schema_version, model, scores_json, total_score, rationale_fi,
           structured_menu_json, assessed_at
-        ) VALUES (?, 'shared-v1', 'v2', 'v5', 'v4', 'test-model', ?, 9.9,
+        ) VALUES (?, 'shared-v1', 'v2', 'v6', 'v5', 'test-model', ?, 9.9,
           'Korvattu arvio.', ?, ?)`,
       ).run(
         oldRevision.lastInsertRowid,

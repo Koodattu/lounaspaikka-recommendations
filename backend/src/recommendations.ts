@@ -14,7 +14,18 @@ export const assessmentScoresSchema = z.object({
   variety: scoreSchema,
 });
 export type AssessmentScores = z.infer<typeof assessmentScoresSchema>;
-export const structuredMenuSchema = z.object({
+const comparisonSchema = z.object({
+  mainCourseIndices: z.array(z.number().int().min(0).max(31)).max(3),
+  vegetarianMain: z.boolean().nullable(),
+  veganMain: z.boolean().nullable(),
+  coffeeIncluded: z.boolean().nullable(),
+  price: z.object({
+    minEur: z.number().nonnegative(),
+    maxEur: z.number().nonnegative().nullable(),
+  }).nullable(),
+});
+
+const structuredMenuObject = z.object({
   courses: z.array(
     z.object({
       category: z.enum([
@@ -34,6 +45,25 @@ export const structuredMenuSchema = z.object({
       nameFi: z.string().trim().min(2).max(300),
     }),
   ).max(32),
+  // Generate courses before references to them. Optional only for historical data.
+  comparison: comparisonSchema.optional(),
+});
+export const structuredMenuSchema = structuredMenuObject.superRefine((menu, context) => {
+  const facts = menu.comparison;
+  if (!facts) return;
+  const indices = facts.mainCourseIndices;
+  if (new Set(indices).size !== indices.length || indices.some((index) => {
+    const course = menu.courses[index];
+    return !course || !["main", "soup", "salad", "unknown"].includes(course.category);
+  })) {
+    context.addIssue({ code: "custom", message: "Highlights must reference distinct meal courses", path: ["comparison", "mainCourseIndices"] });
+  }
+  if (facts.price?.maxEur != null && facts.price.maxEur < facts.price.minEur) {
+    context.addIssue({ code: "custom", message: "Invalid lunch price range", path: ["comparison", "price"] });
+  }
+  if (facts.veganMain === true && facts.vegetarianMain !== true) {
+    context.addIssue({ code: "custom", message: "A vegan main is also vegetarian", path: ["comparison", "vegetarianMain"] });
+  }
 });
 export type StructuredMenu = z.infer<typeof structuredMenuSchema>;
 
@@ -41,6 +71,11 @@ export const assessmentSchema = z.object({
   rationaleFi: z.string().trim().min(5).max(180),
   scores: assessmentScoresSchema,
   structuredMenu: structuredMenuSchema,
+});
+
+// Strict provider JSON has all keys; cross-field checks run before persistence.
+export const assessmentOutputSchema = assessmentSchema.extend({
+  structuredMenu: structuredMenuObject.extend({ comparison: comparisonSchema }),
 });
 
 export interface AssessmentFacts {
@@ -100,10 +135,10 @@ export interface RecommendationResult {
 export const defaultRecommendationVersions: RecommendationVersions = {
   model: "gpt-6-luna",
   profileVersion: "shared-v1",
-  promptVersion: "v5",
+  promptVersion: "v6",
   rankingVersion: "rankable-weighted-v2",
   rubricVersion: "v2",
-  schemaVersion: "v4",
+  schemaVersion: "v5",
 };
 
 interface CandidateRow {

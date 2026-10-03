@@ -1,6 +1,6 @@
 # Mihin lounaalle?
 
-A small Finnish lunch recommendation service for the Seinäjoki area. It collects every restaurant returned by Lounaspaikka within 50 kilometres of the fixed centre point, preserves menu revisions in SQLite, and publishes one shared daily top three.
+A small Finnish lunch recommendation service for the Seinäjoki area. It collects every restaurant returned by Lounaspaikka within 50 kilometres of the fixed centre point, preserves menu revisions in SQLite, and compares all assessed lunches in one daily ranking.
 
 The first version is intentionally narrow: no user accounts, personalization, separate job queue, or separate database service. It has one password-protected operational admin screen.
 
@@ -15,6 +15,9 @@ The first version is intentionally narrow: no user accounts, personalization, se
 - OpenAI calls have separate hard request budgets for each startup/scheduled refresh and each admin source-add action. Cached custom-page extractions do not consume budget, and setting a budget to zero blocks calls for that operation.
 - Scheduled publication and admin source addition run one at a time within the backend process to avoid assessing the same unseen revision twice. A source-add request can wait for the current publication; reader requests remain available.
 - Ranking is deterministic: appeal 35%, distinctiveness 25%, variety 20%, and value 20%. Assessments without an actual extracted lunch course are excluded; ties are ordered by restaurant ID.
+- Daily rows show every available overall score and rationale, up to three main-course highlights, and a prominent lunch price. Full source menus remain in `Koko ruokalista` and the restaurant week. Component scores remain available to the admin; the existing top-three API field and immutable sets are retained for compatibility.
+- Assessment prompt v6 / schema v5 adds selected main-course indices, adult EUR lunch price bounds, explicit vegetarian/vegan main availability, and coffee inclusion. Unknown facts stay null. Side dishes and ambiguous `V` markers cannot establish vegetarian suitability; prices exclude children's, member-only and takeaway/kg offers. Fixed, ranged and from prices remain distinct. Provider output is bounded at 2,400 tokens to accommodate the existing 32-course limit plus these facts; request budgets are unchanged.
+- Reader queries prefer current assessments and can retain prompt v5 / schema v4 data for the exact same revision, profile, rubric and model until normal refresh enriches it. Historical scores are not erased by the rollout; changed menus never inherit an old score. This uses the existing JSON column without a database migration.
 - The admin can label recent immutable assessments as too high or too low. Labels are stored for shared-profile calibration and never act as hidden restaurant penalties or immediate ranking overrides.
 - Calibration search matches restaurant names and menu text locally. The selected review date and search survive refresh, reload and session recovery through the admin URL; feedback results appear beside the assessment.
 - In `Lisätyt ravintolat`, `Hae uudelleen` retries an enabled custom source using the same bounded, serialized workflow as adding its URL. It preserves an unrelated source-form draft and reports the result beside that source.
@@ -23,7 +26,8 @@ The first version is intentionally narrow: no user accounts, personalization, se
 - The reader UI is Finnish. OpenAI instructions and all code are English; model rationales are Finnish.
 - Readers can search the selected day's full menus by restaurant, town, address, or dish. Search preserves the shared ranking and stays applied when changing dates, visiting a restaurant, and returning. The optional `q` in the page URL also restores search after reload or when sharing the link.
 - Returning from a restaurant week focuses that restaurant in the daily list after it loads, preserving comparison position as well as date and search. Missing or filtered-out restaurants do not receive focus.
-- `Valitse päivä` jumps directly to a date in the daily list or a restaurant's week. `Kopioi linkki` copies the selected date and search so another reader can open the same view. If clipboard access is unavailable, a selected link field supports manual copying. Links show the latest stored menus for that date, not a frozen snapshot.
+- Readers can sort by overall score or cheapest stated adult lunch price, and filter for explicitly stated vegetarian/vegan mains. Unknown prices sort last; absent diet information is not treated as absence of an option. Search, `sort=price`, and `diet=vegetarian|vegan` survive date changes, reload and restaurant return. Price ranges compare their lower bound; they do not promise that every dish costs that amount.
+- `Valitse päivä` jumps directly to a date in the daily list or a restaurant's week. `Kopioi linkki` copies the selected date, search, sort and diet filter so another reader can open the same view. If clipboard access is unavailable, a selected link field supports manual copying. Links show the latest stored menus for that date, not a frozen snapshot.
 - Restaurant weeks also provide seven direct day buttons. Switching within the loaded week needs no extra API request and keeps the selected date, shared link, and return to recommendations aligned; all other days remain available for comparison below.
 
 ## Run with Docker Compose

@@ -17,6 +17,7 @@ import {
 } from "./recommendations.js";
 
 export interface DayMenu {
+  assessment: { score: number; rationale: string } | null;
   fetchedAt: string;
   lastAttemptAt: string | null;
   stale: boolean;
@@ -93,31 +94,42 @@ function menuFor(
   };
 }
 
-function structuredMenusFor(
+function assessmentsFor(
   db: Database.Database,
   revisionIds: number[],
   versions: RecommendationVersions,
-): Map<number, StructuredMenu | null> {
+): Map<number, { structuredMenu: StructuredMenu | null; score: number; rationale: string }> {
   if (revisionIds.length === 0) return new Map();
   const placeholders = revisionIds.map(() => "?").join(", ");
+  // v6/v5 adds comparison facts without changing the scoring rubric. Keep the
+  // previous compatible assessment for this exact revision until it is enriched.
+  const allowPrevious = versions.promptVersion === "v6" && versions.schemaVersion === "v5";
   const rows = db
     .prepare(
-      `SELECT revision_id AS revisionId, structured_menu_json AS structuredMenuJson
+      `SELECT revision_id AS revisionId, structured_menu_json AS structuredMenuJson,
+         total_score AS score, rationale_fi AS rationale
        FROM assessments
        WHERE revision_id IN (${placeholders})
-         AND profile_version = ? AND rubric_version = ? AND prompt_version = ?
-         AND schema_version = ? AND model = ?`,
+         AND profile_version = ? AND rubric_version = ? AND model = ?
+         AND ((prompt_version = ? AND schema_version = ?)
+           OR (? AND prompt_version = 'v5' AND schema_version = 'v4'))
+       ORDER BY CASE WHEN prompt_version = ? AND schema_version = ? THEN 1 ELSE 0 END`,
     )
     .all(
       ...revisionIds,
       versions.profileVersion,
       versions.rubricVersion,
+      versions.model,
       versions.promptVersion,
       versions.schemaVersion,
-      versions.model,
-    ) as Array<{ revisionId: number; structuredMenuJson: string | null }>;
+      Number(allowPrevious),
+      versions.promptVersion,
+      versions.schemaVersion,
+    ) as Array<{ revisionId: number; structuredMenuJson: string | null; score: number; rationale: string }>;
   return new Map(
-    rows.map((row) => [row.revisionId, parseStructuredMenu(row.structuredMenuJson)]),
+    rows.map((row) => [row.revisionId, {
+      structuredMenu: parseStructuredMenu(row.structuredMenuJson), score: row.score, rationale: row.rationale,
+    }]),
   );
 }
 
@@ -128,7 +140,7 @@ export function getDayMenus(
 ): DayMenu[] {
   const versions = { ...defaultRecommendationVersions, ...versionOverrides };
   const snapshot = getDailyOfferingSnapshot(db, serviceDate);
-  const structuredMenus = structuredMenusFor(
+  const assessments = assessmentsFor(
     db,
     snapshot.entries.map((entry) => entry.revisionId),
     versions,
@@ -136,13 +148,18 @@ export function getDayMenus(
   const fetchStates = sourceFetchStates(db, [serviceDate]);
   const stateBySource = new Map(fetchStates.map((state) => [state.customSourceId, state]));
 
-  return snapshot.entries.map((entry) => ({
-    fetchedAt: entry.fetchedAt,
-    lastAttemptAt: stateBySource.get(entry.restaurant.customSourceId)?.lastAttemptAt ?? null,
-    stale: stateBySource.get(entry.restaurant.customSourceId)?.stale ?? false,
-    menu: menuFor(entry, structuredMenus.get(entry.revisionId) ?? null),
-    restaurant: restaurantFor(entry),
-  }));
+  return snapshot.entries.map((entry) => {
+    const assessment = assessments.get(entry.revisionId);
+    return {
+      assessment: entry.offering.availability === "published" && assessment?.structuredMenu?.courses.length
+        ? { score: assessment.score, rationale: assessment.rationale } : null,
+      fetchedAt: entry.fetchedAt,
+      lastAttemptAt: stateBySource.get(entry.restaurant.customSourceId)?.lastAttemptAt ?? null,
+      stale: stateBySource.get(entry.restaurant.customSourceId)?.stale ?? false,
+      menu: menuFor(entry, assessment?.structuredMenu ?? null),
+      restaurant: restaurantFor(entry),
+    };
+  });
 }
 
 // Read latest attempts separately from the latest successful menu snapshot.
@@ -441,14 +458,14 @@ export function getRestaurantWeek(
   const snapshots = getDailyOfferingSnapshots(db, serviceDates, restaurantId);
   const stateByDate = new Map(sourceFetchStates(db, serviceDates, restaurant.custom_source_id)
     .map((state) => [state.serviceDate, state]));
-  const structuredMenus = structuredMenusFor(
+  const assessments = assessmentsFor(
     db,
     snapshots.flatMap((snapshot) => snapshot.entries.map((entry) => entry.revisionId)),
     { ...defaultRecommendationVersions, ...versionOverrides },
   );
   const days = snapshots.map(({ serviceDate, entries }) => {
     const observed = entries[0];
-    const menu = observed ? menuFor(observed, structuredMenus.get(observed.revisionId) ?? null) : null;
+    const menu = observed ? menuFor(observed, assessments.get(observed.revisionId)?.structuredMenu ?? null) : null;
     return {
       fetchedAt: observed?.fetchedAt ?? null,
       lastAttemptAt: stateByDate.get(serviceDate)?.lastAttemptAt ?? null,

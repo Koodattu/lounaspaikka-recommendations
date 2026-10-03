@@ -28,6 +28,42 @@ describe("reader API", () => {
     db?.close();
   });
 
+  it("retains compatible historical scores until enrichment, but never across menu revisions", async () => {
+    db = openDatabase(":memory:");
+    let body = "Kasviscurry";
+    const catchment = createRestaurantCatchment({ db,
+      lounaspaikka: catchmentAdapterForOfferings(() => [item("a", "A-ravintola", body)]),
+    });
+    await catchment.refresh("2026-07-14");
+    const assessment = {
+      rationaleFi: "Kasviscurry tarjoaa lämpimän lounaan.",
+      scores: { appeal: 7, distinctiveness: 7, value: 7, variety: 7 },
+      structuredMenu: { courses: [{ category: "main", nameFi: body, dietaryMarkers: [], explicitAllergens: [] }] },
+    };
+    await assessAndRankDay({ db, serviceDate: "2026-07-14",
+      versions: { promptVersion: "v5", schemaVersion: "v4" },
+      assessor: { assess: async () => ({ assessment }) },
+    });
+    app = createServer({ db });
+    const before = (await app.inject("/api/days/2026-07-14")).json();
+    expect(before.menus[0].assessment).toEqual({ score: 7, rationale: assessment.rationaleFi });
+    expect(before.menus[0].menu.structuredMenu.comparison).toBeUndefined();
+    const comparison = { mainCourseIndices: [0], vegetarianMain: true, veganMain: null,
+      coffeeIncluded: null, price: { minEur: 12, maxEur: 12 } };
+    await assessAndRankDay({ db, serviceDate: "2026-07-14", assessor: { assess: async () => ({
+      assessment: { ...assessment, structuredMenu: { ...assessment.structuredMenu, comparison } },
+    }) } });
+    const enriched = (await app.inject("/api/days/2026-07-14")).json();
+    expect(enriched.menus[0].menu.structuredMenu.comparison).toEqual(comparison);
+    expect((await app.inject("/api/restaurants/a/weeks/2026-07-13")).json().days[1].structuredMenu.comparison)
+      .toEqual(comparison);
+    body = "Lohikeitto";
+    await catchment.refresh("2026-07-14");
+    const changed = (await app.inject("/api/days/2026-07-14")).json();
+    expect(changed.menus[0].assessment).toBeNull();
+    expect(changed.menus[0].menu.structuredMenu).toBeNull();
+  });
+
   it("identifies failed source updates beside retained menus without marking healthy sources stale", async () => {
     db = openDatabase(":memory:");
     let timestamp = "2026-07-14T03:00:00.000Z";
@@ -168,6 +204,9 @@ describe("reader API", () => {
       scores: { appeal: 10, distinctiveness: 10, value: 10, variety: 10 },
     });
     expect(dayBody.menus).toHaveLength(4);
+    expect(dayBody.menus.map((entry: { assessment: unknown }) => entry.assessment)).toEqual(
+      items.map((offering) => ({ score: 10, rationale: `${offering.menuText} tarjoaa päivän kiinnostavimman annoksen.` })),
+    );
     expect(dayBody.menus[1].menu.text).toBe("Paahdettua kuhaa\n13,50 €");
     expect(dayBody.menus[1].menu.priceText).toBe("13,50 €");
     expect(dayBody.menus[1].menu.structuredMenu).toEqual({

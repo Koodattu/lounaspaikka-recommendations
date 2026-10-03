@@ -80,19 +80,39 @@ export function menuSearchQuery(search: string): string {
   return new URLSearchParams(search).get("q") ?? "";
 }
 
+export interface MenuView {
+  sort: "rating" | "price";
+  diet: "all" | "vegetarian" | "vegan";
+}
+
+export function menuView(search: string): MenuView {
+  const params = new URLSearchParams(search);
+  const diet = params.get("diet");
+  return {
+    sort: params.get("sort") === "price" ? "price" : "rating",
+    diet: diet === "vegetarian" || diet === "vegan" ? diet : "all",
+  };
+}
+
+function appendView(params: URLSearchParams, view?: MenuView) {
+  if (view?.sort === "price") params.set("sort", view.sort);
+  if (view && view.diet !== "all") params.set("diet", view.diet);
+}
+
 export function menuTargetId(restaurantId: string): string {
   return `menu-${encodeURIComponent(restaurantId)}`;
 }
 
-export function dayHref(date: string, query = "", restaurantId?: string): string {
+export function dayHref(date: string, query = "", restaurantId?: string, view?: MenuView): string {
   const params = new URLSearchParams({ date });
   if (query) params.set("q", query);
+  appendView(params, view);
   const target = restaurantId ? `#${encodeURIComponent(menuTargetId(restaurantId))}` : "";
   return `/?${params}${target}`;
 }
 
-export function restaurantHref(restaurantId: string, date: string, query = ""): string {
-  return restaurantWeekHref(restaurantId, startOfWeek(date), date, query);
+export function restaurantHref(restaurantId: string, date: string, query = "", view?: MenuView): string {
+  return restaurantWeekHref(restaurantId, startOfWeek(date), date, query, view);
 }
 
 export function restaurantWeekHref(
@@ -100,8 +120,10 @@ export function restaurantWeekHref(
   week: string,
   date: string,
   query = "",
+  view?: MenuView,
 ): string {
   const params = new URLSearchParams({ week, date });
   if (query) params.set("q", query);
+  appendView(params, view);
   return `/ravintolat/${encodeURIComponent(restaurantId)}?${params}`;
 }

@@ -21,6 +21,13 @@ export interface Menu {
 }
 
 export interface StructuredMenu {
+  comparison?: {
+    mainCourseIndices: number[];
+    vegetarianMain: boolean | null;
+    veganMain: boolean | null;
+    coffeeIncluded: boolean | null;
+    price: { minEur: number; maxEur: number | null } | null;
+  };
   courses: Array<{
     category: "unknown" | "starter" | "soup" | "main" | "side" | "salad" | "dessert" | "bread" | "drink" | "other";
     dietaryMarkers: string[];
@@ -101,6 +108,7 @@ export interface DayResponse {
   lastAttemptAt: string | null;
   lastSuccessfulFetchAt: string | null;
   menus: Array<{
+    assessment?: { score: number; rationale: string } | null;
     fetchedAt: string;
     lastAttemptAt?: string | null;
     stale?: boolean;

@@ -1785,17 +1785,7 @@ body {
   white-space: normal;
 }
 
-.decision-heading {
-  align-self: end;
-}
 
-.decision-heading h1 {
-  font-family: Aptos, "Segoe UI", sans-serif;
-  font-size: 1.5rem;
-  font-weight: 760;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
-}
 
 .recommendation-section {
   padding-bottom: 18px;
@@ -2887,9 +2877,6 @@ body {
     font-size: 2.75rem;
   }
 
-  .decision-heading h1 {
-    font-size: 1.85rem;
-  }
 
   .day-row {
     grid-template-columns: minmax(180px, 0.75fr) minmax(0, 1.6fr);
@@ -3040,9 +3027,6 @@ body {
   text-underline-offset: 3px;
 }
 
-.day-wayfinding > .reader-actions {
-  grid-row: 2;
-}
 
 .date-picker summary {
   width: fit-content;
@@ -3122,12 +3106,13 @@ body {
 
 .menu-search-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
 }
 
 .menu-search input {
-  flex: 1 1 12rem;
+  flex: 1;
+  width: 0;
   min-width: 0;
 }
 
@@ -3135,6 +3120,8 @@ body {
   flex: none;
   max-width: 100%;
   margin: 0;
+  padding-inline: 12px;
+  font-size: 0.875rem;
 }
 
 .empty-search-state p {
@@ -3189,40 +3176,91 @@ body {
   font-size: 0.875rem;
 }
 
+
+/* Daily comparison: shared controls, aligned meals and one overall assessment. */
+.day-wayfinding {
+  grid-template-columns: minmax(360px, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px 32px;
+  padding: 12px 0;
+}
+.date-navigation h1 {
+  margin: 0;
+  font: inherit;
+  font-size: 1.12rem;
+  font-weight: 760;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+.day-wayfinding .menu-search {
+  justify-self: end;
+  width: 100%;
+  max-width: 520px;
+  padding: 0;
+}
+.comparison-controls {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+}
+.menu-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.menu-filters label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.menu-filters select {
+  min-height: 46px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 10px 30px 10px 12px;
+  border: 1px solid var(--quiet-divider);
+  border-radius: 10px;
+  background: var(--clear-surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 650;
+}
+.menu-filters select:focus-visible {
+  outline: 3px solid var(--signal-clay-hover);
+  outline-offset: 3px;
+}
 .daily-menu-list {
   padding: 0;
   margin: 0;
   border-block: 1px solid var(--quiet-divider);
   list-style: none;
 }
-
 .daily-menu-list > li + li {
   border-top: 1px solid var(--quiet-divider);
 }
-
 .daily-menu-row {
   display: grid;
-  gap: 12px;
-  padding: 14px 4px;
+  gap: 16px;
+  padding: 22px 16px;
 }
-
 .daily-menu-row.rank-1 {
   background: rgba(51, 76, 57, 0.055);
 }
-
 .daily-menu-restaurant,
 .daily-menu-content,
 .menu-assessment {
   min-width: 0;
 }
-
 .daily-menu-title-line {
   display: flex;
-  min-height: 32px;
-  align-items: center;
-  gap: 8px;
+  align-items: baseline;
+  gap: 10px;
 }
-
 .daily-menu-title-line h3 {
   min-width: 0;
   flex: 1;
@@ -3232,312 +3270,213 @@ body {
   font-size: 1.25rem;
   font-weight: 760;
   letter-spacing: -0.015em;
-  line-height: 1.2;
+  line-height: 1.25;
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
-
 .daily-menu-title-line h3 a {
   display: inline-flex;
-  min-height: 46px;
+  min-height: 44px;
   align-items: center;
   color: inherit;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
-
 .daily-menu-title-line h3:focus {
   outline: 2px solid var(--signal-clay-hover);
   outline-offset: 4px;
 }
-
 .rank-marker {
   display: inline-grid;
-  width: 28px;
   min-width: 28px;
   height: 28px;
+  padding-inline: 4px;
   place-items: center;
-  border-radius: 999px;
-  color: var(--light-on-dark);
-  background: var(--route-green);
+  border: 1px solid var(--quiet-divider);
+  border-radius: 50%;
+  color: var(--route-green);
   font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
   font-weight: 760;
 }
-
-.daily-menu-row.rank-2 .rank-marker,
-.daily-menu-row.rank-3 .rank-marker {
-  color: var(--route-green);
-  border: 1px solid rgba(51, 76, 57, 0.45);
-  background: var(--clear-surface);
+.rank-1 .rank-marker {
+  background: var(--route-green);
+  color: var(--light-on-dark);
 }
-
-.row-assessment-score {
-  flex: 0 0 auto;
-  color: var(--route-green);
-  font-size: 1rem;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.row-assessment-score small {
-  font-size: 0.875rem;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
 .restaurant-address,
-.daily-menu-facts,
 .menu-provenance {
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 0.875rem;
-  line-height: 1.35;
-  text-wrap: pretty;
+  line-height: 1.4;
 }
-
-.daily-menu-facts,
-.menu-provenance {
+.daily-menu-facts {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 12px;
   font-variant-numeric: tabular-nums;
 }
-
+.daily-menu-facts > span {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.lunch-price {
+  color: var(--ink);
+  font-size: 1.4rem;
+  font-weight: 760;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
+}
+.lunch-price.is-unknown {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
 .daily-menu-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 14px;
-  margin-top: 5px;
+  gap: 0 16px;
+  margin-top: 4px;
 }
-
 .daily-menu-actions .text-link {
-  min-height: 46px;
+  min-height: 44px;
   font-size: 0.875rem;
 }
-
-.menu-provenance {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px 10px;
-  margin-top: 2px;
-}
-
 .menu-provenance a {
-  font-weight: 700;
+  font-weight: 650;
   text-underline-offset: 3px;
 }
-
-.menu-column-label {
-  display: block;
-  margin: 0 0 6px;
-  color: var(--muted);
-  font-size: 0.875rem;
-  font-weight: 720;
-  line-height: 1.2;
-}
-
-.daily-menu-content > .structured-menu,
-.daily-menu-content > .menu-text {
-  margin: 0;
-}
-
-.daily-menu-content .course-list li {
-  padding: 5px 0;
-}
-
-.daily-menu-content .course-list li:last-child {
-  border-bottom: 0;
-}
-
+.daily-menu-content .course-list li { padding: 8px 0; }
+.daily-menu-content .course-list li:first-child { padding-top: 4px; }
+.daily-menu-content .course-list li:last-child { border-bottom: 0; }
 .daily-menu-content .course-line,
-.daily-menu-content > .menu-text {
-  font-size: 1rem;
-  line-height: 1.4;
-}
-
-.daily-menu-content .raw-menu {
-  padding-top: 3px;
-  margin-top: 7px;
-  border-top: 1px solid var(--quiet-divider);
-}
-
-.daily-menu-content .raw-menu summary {
-  display: list-item;
-  min-height: 46px;
-  padding-block: 13px;
+.menu-summary { font-size: 1rem; line-height: 1.5; }
+.menu-summary { margin: 4px 0; }
+.lunch-inclusions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 0;
+  margin: 10px 0 0;
+  list-style: none;
+  color: var(--route-green);
   font-size: 0.875rem;
+  font-weight: 650;
 }
-
+.full-menu { font-size: 0.875rem; }
+.full-menu summary {
+  min-height: 44px;
+  width: fit-content;
+  padding-block: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.full-menu[open] summary { color: var(--ink); }
+.full-menu .menu-text {
+  margin-top: 4px;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+.menu-source-price { margin-block: 4px; font-weight: 650; }
 .menu-assessment {
   align-self: start;
-  padding: 12px 0;
+  padding-top: 12px;
   border-top: 1px solid var(--quiet-divider);
   color: var(--ink);
 }
-
 .assessment-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   font-size: 0.875rem;
-  font-weight: 760;
-  line-height: 1.2;
+  font-weight: 650;
 }
-
-.assessment-rationale {
-  display: grid;
-  gap: 3px;
-  margin: 7px 0 0;
-  font-size: 0.875rem;
-  line-height: 1.42;
-  text-wrap: pretty;
-}
-
-.assessment-breakdown {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
-  gap: 4px 12px;
-  margin: 10px 0 0;
-}
-
-.assessment-breakdown > div {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-  padding-top: 5px;
-  border-top: 1px solid rgba(51, 76, 57, 0.2);
-}
-
-.assessment-breakdown dt,
-.assessment-breakdown dd {
-  margin: 0;
-  font-size: 0.875rem;
-  line-height: 1.25;
-}
-
-.assessment-breakdown dt {
-  color: var(--muted);
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.assessment-breakdown dd {
-  flex: 0 0 auto;
+.row-assessment-score {
+  color: var(--route-green);
+  font-size: 1.75rem;
   font-variant-numeric: tabular-nums;
   font-weight: 760;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
 }
-
-.reader-main :is(.date-navigation, .week-toolbar) button:active,
-.reader-main :is(.button, .text-link):active {
-  transform: scale(0.96);
+.row-assessment-score small {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0;
 }
-
-.menu-data-notice {
-  margin: 12px 0;
+.assessment-rationale {
+  margin: 10px 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  text-wrap: pretty;
 }
-
-.source-footer {
-  padding-top: 14px;
+.assessment-unavailable,
+.filter-explanation {
+  margin: 0 0 10px;
+  font-size: 0.875rem;
+  color: var(--muted);
+  line-height: 1.5;
 }
+.rank-1 .menu-assessment {
+  padding: 18px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--light-on-dark);
+  background: var(--route-green);
+}
+.rank-1 .row-assessment-score { color: inherit; }
+.menu-data-notice { margin: 12px 0; }
+.source-footer { padding-top: 14px; }
 
-@media (max-width: 599px) {
-  .daily-menus-heading {
+@media (max-width: 759px) {
+  .day-wayfinding {
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
   }
-
-  .assessment-method {
-    width: auto;
+  .date-navigation h1 { font-size: 0.95rem; }
+  .day-wayfinding .menu-search { max-width: none; }
+  .comparison-controls,
+  .menu-filters { width: 100%; }
+  .menu-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+    gap: 12px;
   }
-
-  .daily-menu-row {
-    padding: 12px 0;
-  }
-
-  .daily-menu-row.rank-1 {
-    padding-inline: 8px;
-    margin-inline: -8px;
-  }
-
-  .daily-menu-title-line {
-    align-items: center;
+  .menu-filters label { display: grid; gap: 4px; }
+  .comparison-controls .reader-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
-
 @media (min-width: 760px) {
   .reader-header,
-  .reader-main {
-    width: min(100% - 32px, 1320px);
-  }
-
+  .reader-main { width: min(100% - 32px, 1320px); }
   .daily-menu-row {
-    grid-template-columns: minmax(190px, 0.62fr) minmax(0, 1.38fr);
-    grid-template-areas:
-      "restaurant menu"
-      "restaurant assessment";
-    gap: 12px 24px;
-    padding: 16px 4px;
+    grid-template-columns: minmax(240px, 1fr) minmax(0, 1.45fr);
+    grid-template-areas: "restaurant menu" "restaurant assessment";
+    gap: 16px 28px;
+    padding: 24px;
   }
-
-  .daily-menu-restaurant {
-    grid-area: restaurant;
-  }
-
-  .daily-menu-title-line {
-    display: grid;
-    grid-template-columns: 28px minmax(0, 1fr);
-    gap: 4px 8px;
-  }
-
-  .daily-menu-title-line h3,
-  .row-assessment-score {
-    grid-column: 2;
-  }
-
-  .daily-menu-row:not(.is-recommended) .daily-menu-title-line h3 {
-    grid-column: 1 / -1;
-  }
-
-  .row-assessment-score {
-    margin-bottom: 6px;
-  }
-
-  .daily-menu-content {
-    grid-area: menu;
-  }
-
-  .menu-assessment {
-    grid-area: assessment;
-  }
+  .daily-menu-restaurant { grid-area: restaurant; }
+  .daily-menu-content { grid-area: menu; }
+  .menu-assessment { grid-area: assessment; }
 }
-
 @media (min-width: 1080px) {
-  .day-wayfinding {
-    grid-template-columns: minmax(390px, 0.72fr) minmax(0, 1fr);
-    padding: 10px 0 12px;
-  }
-
-  .day-wayfinding > .decision-heading {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
   .daily-menu-row {
-    grid-template-columns: minmax(205px, 0.65fr) minmax(360px, 1.55fr) minmax(245px, 0.8fr);
+    grid-template-columns: minmax(250px, 1fr) minmax(0, 1.6fr) minmax(240px, 1fr);
     grid-template-areas: "restaurant menu assessment";
-    gap: 24px;
-    padding: 17px 4px;
   }
-
-  .daily-menu-row:not(.is-recommended) .daily-menu-content {
-    grid-column: 2 / -1;
-  }
-
-  .daily-menu-content .course-line,
-  .daily-menu-content > .menu-text {
-    font-size: 1rem;
+  .menu-assessment {
+    padding: 4px 0 0 20px;
+    border-top: 0;
+    border-left: 1px solid var(--quiet-divider);
   }
 }
 
@@ -3595,22 +3534,6 @@ main:focus-visible {
 .restaurant-provenance p,
 .source-footer {
   font-size: 0.875rem;
-}
-
-.rank-1 .menu-assessment {
-  padding: 14px;
-  border: 0;
-  border-radius: 12px;
-  color: var(--light-on-dark);
-  background: var(--route-green);
-}
-
-.rank-1 .assessment-breakdown > div {
-  border-color: rgba(255, 250, 241, 0.3);
-}
-
-.rank-1 .assessment-breakdown dt {
-  color: inherit;
 }
 
 .source-footer a,

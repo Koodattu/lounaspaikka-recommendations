@@ -134,6 +134,90 @@ describe("reader app", () => {
     vi.restoreAllMocks();
   });
 
+  it("compares every assessment, selects three mains, and preserves price/diet choices through navigation", async () => {
+    const names = ["A kallis", "B edullinen", "C ei hintaa", "D kasvis", "E odottaa", "F ei lounasta"];
+    const scores = [6, 7, 8, 9, null, null];
+    const prices = [18.9, 10, null, 13.5, null, 1];
+    const menus = names.map((name, index) => ({
+      ...dayResponse.menus[0], restaurant: { ...restaurant, id: `r${index}`, name },
+      assessment: scores[index] === null ? null : { score: scores[index], rationale: `${name}: päivän annokset.` },
+      menu: { ...menu, status: index === 5 ? "not_published" : "published", priceText: null, structuredMenu: {
+        ...menu.structuredMenu,
+        comparison: {
+          mainCourseIndices: [0, 2, 3], coffeeIncluded: index === 3 ? true : null,
+          vegetarianMain: index === 3 ? true : null, veganMain: null,
+          price: prices[index] === null ? null : { minEur: prices[index], maxEur: prices[index] },
+        },
+      } },
+    }));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => new Response(JSON.stringify({
+      ...dayResponse, menus, recommendations: [], serviceDate: String(input).split("/").at(-1),
+    })));
+    const copy = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText: copy } });
+    render(<App />);
+    await screen.findByRole("heading", { name: "D kasvis" });
+    const rowNames = () => within(screen.getByRole("list", { name: "Päivän ravintolat" }))
+      .getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+    expect(rowNames()).toEqual(["D kasvis", "C ei hintaa", "B edullinen", "A kallis", "E odottaa", "F ei lounasta"]);
+    expect(screen.getAllByLabelText(/^Arvio \d/)).toHaveLength(4);
+    expect(screen.queryByText("Houkuttelevuus")).toBeNull();
+    const first = screen.getByRole("heading", { name: "D kasvis" }).closest("article")!;
+    expect(within(first).getByRole("list", { name: "Pääruokapoiminnat" }).children).toHaveLength(3);
+    expect(within(first).getByText("Kahvi kuuluu")).toBeTruthy();
+    expect(within(first).getByText("Koko ruokalista").closest("details")?.open).toBe(false);
+    fireEvent.click(within(first).getByText("Koko ruokalista"));
+    expect(within(first).getByText(/Sitruunaperunoita/, { selector: ".menu-text" })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Järjestys"), { target: { value: "price" } });
+    expect(rowNames()).toEqual(["B edullinen", "D kasvis", "A kallis", "C ei hintaa", "E odottaa", "F ei lounasta"]);
+    const unpublished = screen.getByRole("heading", { name: "F ei lounasta" }).closest("article")!;
+    expect(within(unpublished).queryByText("1,00 €")).toBeNull();
+    expect(within(unpublished).getByText("Ei julkaistua ruokalistaa.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Ruokavalio"), { target: { value: "vegetarian" } });
+    expect(rowNames()).toEqual(["D kasvis"]);
+    expect(screen.getByRole("link", { name: "D kasvis" }).getAttribute("href"))
+      .toBe("/ravintolat/r3?week=2026-07-13&date=2026-07-14&sort=price&diet=vegetarian");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Kopioi linkki" }));
+    await screen.findByText("Linkki kopioitu.");
+    expect(copy).toHaveBeenCalledWith(`${window.location.origin}/?date=2026-07-14&sort=price&diet=vegetarian`);
+    fireEvent.click(screen.getByRole("button", { name: "Seuraava päivä" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(window.location.search).toBe("?date=2026-07-15&sort=price&diet=vegetarian");
+    expect((screen.getByLabelText("Ruokavalio") as HTMLSelectElement).value).toBe("vegetarian");
+  });
+
+  it("restores sort and diet on reload, history and restaurant return, and clears an empty filter", async () => {
+    window.history.replaceState({}, "", "/?date=2026-07-14&sort=price&diet=vegan");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(dayResponse)));
+    let view = render(<App />);
+    await screen.findByText("Haulla ei löytynyt ruokalistoja.");
+    expect((screen.getByLabelText("Järjestys") as HTMLSelectElement).value).toBe("price");
+    expect((screen.getByLabelText("Ruokavalio") as HTMLSelectElement).value).toBe("vegan");
+    fireEvent.click(screen.getByRole("button", { name: "Poista rajaukset" }));
+    expect(document.activeElement).toBe(screen.getByRole("searchbox"));
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3);
+    expect(window.location.search).toBe("?date=2026-07-14&sort=price");
+    window.history.replaceState({}, "", "/?date=2026-07-14&sort=price&diet=vegetarian");
+    await act(async () => window.dispatchEvent(new PopStateEvent("popstate")));
+    expect((screen.getByLabelText("Ruokavalio") as HTMLSelectElement).value).toBe("vegetarian");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    view.unmount();
+    window.history.replaceState({}, "", "/ravintolat/vinola?date=2026-07-14&sort=price&diet=vegetarian");
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({
+      restaurant: { ...restaurant, description: null, openingHours: [] }, source: dayResponse.source,
+      days: [{ ...menu, serviceDate: "2026-07-14", fetchedAt: "2026-07-14T03:00:00Z" }], weekStart: "2026-07-13",
+    })));
+    view = render(<App />);
+    await screen.findByRole("heading", { name: "Vinola" });
+    expect(screen.getByRole("link", { name: "Tiistai 14. heinäkuuta · suosituksiin" }).getAttribute("href"))
+      .toBe("/?date=2026-07-14&sort=price&diet=vegetarian#menu-vinola");
+    fireEvent.click(screen.getByRole("button", { name: "Seuraava viikko" }));
+    expect(window.location.search).toBe("?week=2026-07-20&date=2026-07-21&sort=price&diet=vegetarian");
+    view.unmount();
+  });
+
   it("marks only the affected daily menu with its failed update and source recovery link", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       ...dayResponse, stale: true,
@@ -302,7 +386,7 @@ describe("reader app", () => {
     fireEvent.click(screen.getByRole("button", { name: "Kopioi linkki" }));
     const link = await screen.findByRole("textbox", { name: "Jaettava linkki" }) as HTMLInputElement;
     expect(link.value).toBe(`${window.location.origin}/ravintolat/vinola?week=2026-07-13&date=2026-07-14&q=kuhaa`);
-    expect(document.activeElement).toBe(link);
+    await waitFor(() => expect(document.activeElement).toBe(link));
     expect(link.selectionStart).toBe(0);
     expect(link.selectionEnd).toBe(link.value.length);
     expect(screen.queryByText("Linkki kopioitu.")).toBeNull();
@@ -499,14 +583,14 @@ describe("reader app", () => {
     );
 
     render(<App browser={browser} />);
-    await screen.findByRole("heading", { name: "Päivän lounaat" });
+    await screen.findByRole("heading", { name: "Kaikki ruokalistat" });
     fireEvent.click(screen.getByRole("button", { name: "Seuraava päivä" }));
 
     expect(push).toHaveBeenCalledWith("/?date=2026-07-15");
     expect(browser.location()).toEqual({ pathname: "/", search: "?date=2026-07-15" });
   });
 
-  it("shows every daily menu once with complete dishes and transparent assessments", async () => {
+  it("shows three meal highlights per restaurant with full source disclosure and one assessment", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {
@@ -517,13 +601,13 @@ describe("reader app", () => {
     render(<App />);
 
     expect(document.querySelector("main")?.getAttribute("aria-busy")).toBe("true");
-    expect(await screen.findByRole("heading", { name: "Päivän lounaat" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Kaikki ruokalistat" })).toBeTruthy();
     expect(document.querySelector("main")?.getAttribute("aria-busy")).toBe("false");
     await waitFor(() =>
       expect(document.title).toBe("Tiistai 14. heinäkuuta | Mihin lounaalle?"),
     );
     expect(
-      await screen.findByText("Tiistai 14. heinäkuuta ladattu. 3 ravintolaa ja 3 suositusta."),
+      await screen.findByText("Tiistai 14. heinäkuuta ladattu. 3 ravintolaa, 3 arvioitu."),
     ).toBeTruthy();
     expect(screen.getAllByText("Vinola")).toHaveLength(1);
     expect(screen.getAllByText(/13,70 €/).length).toBeGreaterThan(0);
@@ -543,13 +627,13 @@ describe("reader app", () => {
     ).toBeTruthy();
     expect(screen.getByText("Kuha ja raikas lisuke tekevät tästä päivän kiinnostavimman lounaan.")).toBeTruthy();
     expect(screen.getAllByText("Paahdettua kuhaa").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Sitruunaperunoita").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Sitruunaperunoita/, { selector: ".menu-text" }).textContent).toContain("Sitruunaperunoita");
     expect(screen.getAllByText("Paahdettua halloumia ja kasviksia").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Porkkana-inkiväärikeittoa").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Vihersalaattia").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Marjarahkaa").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Sitruunaperunoita/, { selector: ".menu-text" }).textContent).toContain("Vihersalaattia");
+    expect(screen.getByText(/Sitruunaperunoita/, { selector: ".menu-text" }).textContent).toContain("Marjarahkaa");
     expect(screen.getAllByText("Ilmoitetut allergeenit: kala").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Alkuperäinen ruokalistateksti").length).toBeGreaterThan(0);
+    expect(screen.getByText("Koko ruokalista").closest("details")?.open).toBe(false);
     expect(screen.queryByText(/Näytä \d+ muuta kohtaa/)).toBeNull();
     expect(screen.getAllByText("Kasviscurry").length).toBeGreaterThan(0);
     const companion = screen.getByRole("heading", { name: "Kasvisravintola", level: 3 })
@@ -574,7 +658,7 @@ describe("reader app", () => {
     fireEvent.click(screen.getByRole("button", { name: "Seuraava päivä" }));
     await waitFor(() => expect(fetchMock.mock.calls.at(-1)?.[0]).toBe("/api/days/2026-07-15"));
     expect(
-      await screen.findByText("Keskiviikko 15. heinäkuuta ladattu. 3 ravintolaa ja 3 suositusta."),
+      await screen.findByText("Keskiviikko 15. heinäkuuta ladattu. 3 ravintolaa, 3 arvioitu."),
     ).toBeTruthy();
     await waitFor(() =>
       expect(document.title).toBe("Keskiviikko 15. heinäkuuta | Mihin lounaalle?"),
@@ -584,7 +668,7 @@ describe("reader app", () => {
     window.dispatchEvent(new PopStateEvent("popstate"));
     await waitFor(() => expect(fetchMock.mock.calls.at(-1)?.[0]).toBe("/api/days/2026-07-14"));
     expect(
-      await screen.findByText("Tiistai 14. heinäkuuta ladattu. 3 ravintolaa ja 3 suositusta."),
+      await screen.findByText("Tiistai 14. heinäkuuta ladattu. 3 ravintolaa, 3 arvioitu."),
     ).toBeTruthy();
 
     const todayButton = screen.getByRole("button", { name: "Siirry tähän päivään" });
@@ -615,7 +699,7 @@ describe("reader app", () => {
     );
 
     const { unmount } = render(<App />);
-    expect(await screen.findByRole("heading", { name: "Päivän lounaat" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Kaikki ruokalistat" })).toBeTruthy();
     expect(
       await screen.findByText("Menuarviot eivät ole vielä saatavilla. Ruokalistat ovat jo selattavissa."),
     ).toBeTruthy();
@@ -637,7 +721,7 @@ describe("reader app", () => {
       ),
     );
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Tälle päivälle ei löytynyt lounaslistoja." })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Tiistai 14. heinäkuuta" })).toBeTruthy();
     expect(await screen.findByText("Tietoja ei ole vielä saatavilla.")).toBeTruthy();
     expect(
       screen.queryByText("Tälle päivälle ei löytynyt julkaistuja lounaslistoja."),
@@ -899,7 +983,7 @@ describe("reader app", () => {
     expect(screen.getByText("Vinola: Keskiviikko 15. heinäkuuta ladattu.")).toBeTruthy();
   });
 
-  it("keeps the leading recommendation's source, freshness, and raw preview honest", async () => {
+  it("keeps the leading menu source accessible without per-row freshness clutter", async () => {
     const customSource = { name: "Vinolan oma lista", url: "https://example.com/vinola/menu" };
     const longFirstLine = "Paikallista kesäkeittoa päivän kasviksista, rapeaa leipää, yrttiöljyä ja paahdettuja siemeniä";
     const rawMenu = {
@@ -941,7 +1025,8 @@ describe("reader app", () => {
       }).getAttribute("href"),
     )
       .toBe(customSource.url);
-    expect(primaryCard!.textContent).toContain("15.7.");
+    expect(primaryCard!.textContent).not.toContain("Päivitetty");
+    expect(primary.getByText("Koko ruokalista").closest("details")?.open).toBe(false);
     expect(screen.queryByRole("heading", { name: "Muut päivän lounaat" })).toBeNull();
   });
 

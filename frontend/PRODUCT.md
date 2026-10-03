@@ -16,11 +16,11 @@ The secondary user is the service's internal operator, who monitors source and r
 
 ## Product Purpose
 
-Mihin lounaalle? reduces daily choice overload by collecting the region's published lunch menus, distilling them into one shared top three, and keeping the full offering available for comparison. Success means a reader can confidently choose today's lunch in under a minute.
+Mihin lounaalle? reduces daily choice overload by collecting the region's published lunch menus, ranking all assessed restaurants, and highlighting up to three main dishes per restaurant. Prices and explicit vegetarian options help narrow the choice; full menus remain available on demand. Success means a reader can confidently choose today's lunch in under a minute.
 
 ## Positioning
 
-The fastest way to choose lunch around Seinäjoki—complete local menu coverage distilled into one transparent daily top three.
+Compare lunch around Seinäjoki through a shared daily ranking, useful main-course highlights and clearly stated prices.
 
 ## Brand Personality
 

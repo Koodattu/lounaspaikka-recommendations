@@ -72,8 +72,8 @@ describe("daily recommendations", () => {
       `SELECT assessment.structured_menu_json AS structuredMenuJson, revision.menu_text AS menuText
        FROM assessments assessment
        JOIN offering_revisions revision ON revision.id = assessment.revision_id
-       WHERE revision.restaurant_id = 'b' AND assessment.prompt_version = 'v5'
-         AND assessment.schema_version = 'v4'`,
+       WHERE revision.restaurant_id = 'b' AND assessment.prompt_version = 'v6'
+         AND assessment.schema_version = 'v5'`,
     ).get() as { menuText: string; structuredMenuJson: string };
     expect(storedMenu.menuText).toBe("Paahdettua kuhaa");
     expect(JSON.parse(storedMenu.structuredMenuJson)).toEqual({
@@ -235,6 +235,28 @@ describe("daily recommendations", () => {
 });
 
 describe("structured menu schema", () => {
+  it("keeps legacy menus readable and rejects misleading comparison facts", () => {
+    const courses = [
+      { category: "main", dietaryMarkers: [], explicitAllergens: [], nameFi: "Kasviscurry" },
+      { category: "side", dietaryMarkers: ["V"], explicitAllergens: [], nameFi: "Riisiä" },
+    ];
+    const comparison = {
+      mainCourseIndices: [0], vegetarianMain: true, veganMain: null, coffeeIncluded: null,
+      price: { minEur: 12.5, maxEur: 14 },
+    };
+    expect(structuredMenuSchema.parse({ courses, comparison })).toEqual({ courses, comparison });
+    for (const invalid of [
+      { ...comparison, mainCourseIndices: [2] },
+      { ...comparison, mainCourseIndices: [0, 0] },
+      { ...comparison, mainCourseIndices: [1] },
+      { ...comparison, vegetarianMain: false, veganMain: true },
+      { ...comparison, price: { minEur: 14, maxEur: 12.5 } },
+    ]) {
+      expect(structuredMenuSchema.safeParse({ courses, comparison: invalid }).success).toBe(false);
+    }
+    expect(structuredMenuSchema.parse({ courses })).toEqual({ courses });
+  });
+
   it("allows an unknown category and a complete explicit allergen declaration", () => {
     const course = {
       category: "unknown",

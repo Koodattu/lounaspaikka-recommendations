@@ -55,9 +55,15 @@ describe("OpenAI lunch assessor", () => {
     expect(request.input).not.toContain("restaurantId");
     expect(request.input).not.toContain("restaurantName");
     expect(request.input).not.toContain("revisionId");
-    expect(request.max_output_tokens).toBe(1_200);
+    expect(request.max_output_tokens).toBe(2_400);
     expect(request.text.format.type).toBe("json_schema");
     expect(JSON.stringify(request.text.format)).toContain("structuredMenu");
+    const comparison = request.text.format.schema.properties.structuredMenu.properties.comparison;
+    expect(comparison.required).toEqual(expect.arrayContaining([
+      "mainCourseIndices", "price", "vegetarianMain", "veganMain", "coffeeIncluded",
+    ]));
+    expect(request.instructions).toContain("adult lunch per person");
+    expect(request.instructions).toContain("Never treat a side salad");
     expect(result).toMatchObject({
       assessment: {
         rationaleFi: "Kuha tekee listasta tavallista kiinnostavamman.",

@@ -134,6 +134,102 @@ describe("reader app", () => {
     vi.restoreAllMocks();
   });
 
+  it("shows why a hidden menu item matches a search and restores main courses when cleared", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(dayResponse)));
+    render(<App />);
+    const search = await screen.findByRole("searchbox");
+    fireEvent.change(search, { target: { value: "VINOLA marja" } });
+    const row = screen.getByRole("heading", { name: "Vinola" }).closest("article")!;
+    const matches = within(row).getByRole("list", { name: "Hakua vastaavat kohdat" });
+    expect(matches.textContent).toBe("Marjarahkaa (L)");
+    expect(matches.closest("details")).toBeNull();
+    expect(within(row).getByLabelText("Arvio 9,2 / 10")).toBeTruthy();
+    expect(within(row).getByText("Koko ruokalista").closest("details")?.open).toBe(false);
+    expect(screen.queryByRole("heading", { name: "Kasvisravintola" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tyhjennä haku" }));
+    expect(within(row).queryByRole("list", { name: "Hakua vastaavat kohdat" })).toBeNull();
+    expect(within(row).getByRole("list", { name: "Pääruokapoiminnat" }).children).toHaveLength(3);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("bounds literal search excerpts and preserves the complete original menu", async () => {
+    const original = [
+      `${"Pitkä kuvaus. ".repeat(25)} Tomaattikeitto [VE]`,
+      "Papupihvit [VE]", "Kasvispata [VE]", "Marjapiirakka [VE]",
+    ].join("\n");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      ...dayResponse, menus: [{ ...dayResponse.menus[0], menu: { ...menu, structuredMenu: null, text: original } }],
+    })));
+    render(<App />);
+    fireEvent.change(await screen.findByRole("searchbox"), { target: { value: "[ve]" } });
+    const matches = screen.getByRole("list", { name: "Hakua vastaavat kohdat" });
+    const lines = within(matches).getAllByRole("listitem");
+    expect(lines).toHaveLength(3);
+    expect(lines[0]!.textContent).toContain("Tomaattikeitto [VE]");
+    expect(lines[0]!.textContent!.length).toBeLessThanOrEqual(222);
+    expect(within(matches).getAllByText("[VE]", { selector: "mark" })).toHaveLength(3);
+    fireEvent.click(screen.getByText("Koko ruokalista"));
+    expect(screen.getByText("Koko ruokalista").closest("details")?.querySelector(".menu-text")?.textContent).toBe(original);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "VINOLA" } });
+    expect(screen.queryByRole("list", { name: "Hakua vastaavat kohdat" })).toBeNull();
+  });
+
+  it("keeps the selected day's full menu and summarizes other days with consistent meal facts", async () => {
+    window.history.replaceState({}, "", "/ravintolat/vinola?week=2026-07-13&date=2026-07-14");
+    const weeklyMenu = { ...menu, priceText: "Lounas 14,90 €, lapset 7 €", structuredMenu: {
+      ...menu.structuredMenu, comparison: {
+        mainCourseIndices: [0, 2, 3], vegetarianMain: true, veganMain: null, coffeeIncluded: true,
+        price: { minEur: 14.9, maxEur: 14.9 },
+      },
+    } };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      days: ["2026-07-13", "2026-07-14"].map((serviceDate) => ({ ...weeklyMenu, serviceDate, fetchedAt: "2026-07-14T03:10:00Z" })),
+      restaurant: { ...restaurant, description: null, openingHours: [] }, source: dayResponse.source,
+      weekStart: "2026-07-13", weekEnd: "2026-07-19",
+    })));
+    render(<App />);
+    const selected = (await screen.findByRole("heading", { name: "Tiistai 14. heinäkuuta" })).closest("article")!;
+    const other = within(screen.getByRole("region", { name: "Muut päivät" })).getByRole("article");
+    expect(within(other).getByRole("list", { name: "Pääruokapoiminnat" }).children).toHaveLength(3);
+    expect(within(other).getByText("Koko ruokalista").closest("details")?.open).toBe(false);
+    expect(within(selected).getByRole("list", { name: "Ruokalista" }).children).toHaveLength(6);
+    for (const row of [selected, other]) {
+      expect(within(row).getByText("14,90 €")).toBeTruthy();
+      expect(within(row).getByText("Kasvispääruoka")).toBeTruthy();
+      expect(within(row).getByText("Kahvi kuuluu")).toBeTruthy();
+    }
+    expect(within(selected).getByText("Lounas 14,90 €, lapset 7 €")).toBeTruthy();
+    fireEvent.click(within(other).getByText("Koko ruokalista"));
+    expect(within(other).getByText("Koko ruokalista").closest("details")?.querySelector(".menu-text")?.textContent).toBe(menu.text);
+    fireEvent.click(screen.getByRole("button", { name: "Maanantai 13. heinäkuuta" }));
+    const next = screen.getByRole("heading", { name: "Maanantai 13. heinäkuuta" }).closest("article")!;
+    expect(within(next).getByRole("list", { name: "Ruokalista" }).children).toHaveLength(6);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not present retained meal details as a published lunch on an unpublished date", async () => {
+    window.history.replaceState({}, "", "/ravintolat/vinola?week=2026-07-13&date=2026-07-14");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      days: [
+        { ...menu, serviceDate: "2026-07-13", fetchedAt: "2026-07-14T03:10:00Z" },
+        { ...menu, status: "not_published", serviceDate: "2026-07-14", fetchedAt: "2026-07-14T03:10:00Z" },
+      ],
+      restaurant: { ...restaurant, description: null, openingHours: [] }, source: dayResponse.source,
+      weekStart: "2026-07-13", weekEnd: "2026-07-19",
+    })));
+    render(<App />);
+    const selected = (await screen.findByRole("heading", { name: "Tiistai 14. heinäkuuta" })).closest("article")!;
+    expect(within(selected).getByText("Ruokalistaa ei ole julkaistu.")).toBeTruthy();
+    expect(within(selected).queryByText("13,70 €")).toBeNull();
+    expect(within(selected).queryByText("Paahdettua kuhaa")).toBeNull();
+    expect(within(selected).queryByText(/Varmista ruokavaliomerkinnät/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Maanantai 13. heinäkuuta" }));
+    const other = within(screen.getByRole("region", { name: "Muut päivät" })).getByRole("article");
+    expect(within(other).getByText("Ruokalistaa ei ole julkaistu.")).toBeTruthy();
+    expect(within(other).queryByText("13,70 €")).toBeNull();
+  });
+
   it("compares every assessment, selects three mains, and preserves price/diet choices through navigation", async () => {
     const names = ["A kallis", "B edullinen", "C ei hintaa", "D kasvis", "E odottaa", "F ei lounasta"];
     const scores = [6, 7, 8, 9, null, null];
@@ -469,7 +565,8 @@ describe("reader app", () => {
       fireEvent.change(search, { target: { value: term } });
       expect(within(results).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent))
         .toEqual(["Kasvisravintola"]);
-      expect(within(results).getByText("Kasviscurry")).toBeTruthy();
+      expect(within(results).getByText((_text, element) => element?.textContent === "Kasviscurry"
+        && !Array.from(element.children).some((child) => child.textContent === "Kasviscurry"))).toBeTruthy();
       expect(within(results).getByRole("img", { name: "Sija 2" })).toBeTruthy();
     }
     fireEvent.change(search, { target: { value: "ei-olemassa" } });

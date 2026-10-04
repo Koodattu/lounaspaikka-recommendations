@@ -25,7 +25,7 @@ import {
   type MenuView,
 } from "./navigation";
 import { formatScore } from "./scores";
-import { compareMenus, lunchPrice, mainCourses, priceLabel } from "./menu-comparison";
+import { compareMenus, lunchPrice, mainCourses, matchingMenuLines, menuSearchTerms, priceLabel } from "./menu-comparison";
 import { ReaderActions } from "./ReaderActions";
 import type {
   DayResponse,
@@ -238,13 +238,13 @@ function DietarySafetyNote() {
   );
 }
 
-function CourseList({ courses, label }: { courses: StructuredMenu["courses"]; label?: string }) {
+function CourseList({ courses, label, query = "" }: { courses: StructuredMenu["courses"]; label?: string; query?: string }) {
   return (
     <ul className="course-list" aria-label={label}>
       {courses.map((course, index) => (
         <li key={`${course.nameFi}-${index}`}>
           <div className="course-line">
-            <span className="course-name">{course.nameFi}</span>
+            <span className="course-name"><SearchMatch text={course.nameFi} query={query} /></span>
             {course.dietaryMarkers.length > 0 && (
               <span
                 className="dietary-markers"
@@ -269,23 +269,25 @@ function CourseList({ courses, label }: { courses: StructuredMenu["courses"]; la
 function MenuContent({
   menu,
   showRawText = true,
+  query = "",
 }: {
   menu: Pick<Menu, "structuredMenu" | "text">;
   showRawText?: boolean;
+  query?: string;
 }) {
   const courses = menu.structuredMenu?.courses ?? [];
   if (courses.length === 0) {
     if (!menu.text) return <p className="muted">Ei julkaistua ruokalistaa.</p>;
-    return <p className="menu-text">{menu.text}</p>;
+    return <p className="menu-text"><SearchMatch text={menu.text} query={query} /></p>;
   }
 
   return (
     <div className="structured-menu">
-      <CourseList courses={courses} />
+      <CourseList courses={courses} label="Ruokalista" query={query} />
       {showRawText && menu.text && (
         <details className="raw-menu">
           <summary>Näytä lähdeteksti</summary>
-          <p className="menu-text">{menu.text}</p>
+          <p className="menu-text"><SearchMatch text={menu.text} query={query} /></p>
         </details>
       )}
     </div>
@@ -310,32 +312,56 @@ function MenuDataNotice() {
   );
 }
 
-function MenuHighlights({ menu }: { menu: Menu }) {
+function SearchMatch({ text, query }: { text: string; query: string }) {
+  const terms = menuSearchTerms(query).sort((a, b) => b.length - a.length);
+  if (terms.length === 0) return text;
+  const pattern = new RegExp(`(${terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "giu");
+  return text.split(pattern).map((part, index) => index % 2 === 1 ? <mark key={index}>{part}</mark> : part);
+}
+
+function LunchFacts({ menu }: { menu: Menu }) {
+  if (menu.status !== "published") return null;
+  return <div className="lunch-facts">
+    <strong className={"lunch-price" + (!menu.priceText && !lunchPrice(menu) ? " is-unknown" : "")}>{priceLabel(menu)}</strong>
+    {menu.lunchHours && <span>Lounas {menu.lunchHours}</span>}
+  </div>;
+}
+
+function LunchInclusions({ menu }: { menu: Menu }) {
+  const facts = menu.structuredMenu?.comparison;
+  if (menu.status !== "published" || (!facts?.vegetarianMain && !facts?.coffeeIncluded)) return null;
+  return <ul className="lunch-inclusions" aria-label="Lounaan tiedot">
+    {facts.veganMain ? <li>Vegaaninen pääruoka</li> : facts.vegetarianMain && <li>Kasvispääruoka</li>}
+    {facts.coffeeIncluded && <li>Kahvi kuuluu</li>}
+  </ul>;
+}
+
+function MenuHighlights({ menu, query = "" }: { menu: Menu; query?: string }) {
   if (menu.status !== "published") {
     return <div className="daily-menu-content"><p className="menu-summary">Ei julkaistua ruokalistaa.</p></div>;
   }
   const courses = mainCourses(menu);
-  const facts = menu.structuredMenu?.comparison;
+  const matches = matchingMenuLines(menu, query);
   const simpleText = courses.length === 0 && menu.text && !menu.text.includes("\n") && menu.text.length <= 160;
   return (
     <div className="daily-menu-content">
-      {courses.length > 0
+      {matches.length > 0 ? <div className="menu-search-matches">
+        <p>Hakua vastaavat kohdat</p>
+        <ul className="course-list" aria-label="Hakua vastaavat kohdat">
+          {matches.map((line, index) => <li key={`${index}-${line}`}><SearchMatch text={line} query={query} /></li>)}
+        </ul>
+      </div> : courses.length > 0
         ? <CourseList courses={courses} label="Pääruokapoiminnat" />
         : <p className="menu-summary">{simpleText ? menu.text : menu.text
           ? "Pääruokia ei ole vielä eritelty." : "Ei julkaistua ruokalistaa."}</p>}
-      {(facts?.vegetarianMain || facts?.coffeeIncluded) && (
-        <ul className="lunch-inclusions" aria-label="Lounaan tiedot">
-          {facts.veganMain ? <li>Vegaaninen pääruoka</li> : facts.vegetarianMain && <li>Kasvispääruoka</li>}
-          {facts.coffeeIncluded && <li>Kahvi kuuluu</li>}
-        </ul>
-      )}
+      <LunchInclusions menu={menu} />
       {(menu.text || menu.structuredMenu?.courses.length || menu.priceText)
         && (!simpleText || (menu.priceText && menu.priceText !== priceLabel(menu))) && (
         <details className="full-menu">
           <summary>Koko ruokalista</summary>
           {menu.priceText && <p className="menu-source-price">{menu.priceText}</p>}
-          {menu.text ? <p className="menu-text">{menu.text}</p>
-            : <CourseList courses={menu.structuredMenu?.courses ?? []} />}
+          {menu.text ? <p className="menu-text"><SearchMatch text={menu.text} query={query} /></p>
+            : <CourseList courses={menu.structuredMenu?.courses ?? []} query={query} />}
         </details>
       )}
     </div>
@@ -439,10 +465,7 @@ function DailyMenuList({ data, query, view, onReset }: {
                     </h3>
                   </div>
                   {restaurantAddress(entry.restaurant) && <p className="restaurant-address">{restaurantAddress(entry.restaurant)}</p>}
-                  {entry.menu.status === "published" && <div className="daily-menu-facts">
-                    <strong className={"lunch-price" + (!entry.menu.priceText && !lunchPrice(entry.menu) ? " is-unknown" : "")}>{priceLabel(entry.menu)}</strong>
-                    {entry.menu.lunchHours && <span>Lounas {entry.menu.lunchHours}</span>}
-                  </div>}
+                  <LunchFacts menu={entry.menu} />
                   <div className="daily-menu-actions">
                     <RestaurantLink className="menu-week-link" label="Viikon ruokalista"
                       restaurant={entry.restaurant} date={data.serviceDate} query={query} view={view} />
@@ -454,7 +477,7 @@ function DailyMenuList({ data, query, view, onReset }: {
                   </p>}
                   {entry.stale && <MenuUpdateNotice fetchedAt={entry.fetchedAt} lastAttemptAt={entry.lastAttemptAt} source={source} />}
                 </header>
-                <MenuHighlights menu={entry.menu} />
+                <MenuHighlights menu={entry.menu} query={query} />
                 <aside className="menu-assessment" aria-label={"Menuarvio: " + entry.restaurant.name}>
                   {entry.assessment ? <>
                     <div className="assessment-heading">
@@ -651,12 +674,18 @@ function EmptyDayMessage({ day }: { day: RestaurantDay }) {
   );
 }
 
-function DayMenu({ day, source }: { day: RestaurantDay; source: { url: string } }) {
+function DayMenu({ day, source, compact = false, query = "" }: {
+  day: RestaurantDay; source: { url: string }; compact?: boolean; query?: string;
+}) {
   return (
     <>
       {day.stale && <MenuUpdateNotice fetchedAt={day.fetchedAt} lastAttemptAt={day.lastAttemptAt} source={day.source ?? source} />}
-      {day.text || day.structuredMenu?.courses.length
-        ? <MenuContent menu={day} />
+      {day.status === "published" && (day.text || day.structuredMenu?.courses.length)
+        ? compact ? <MenuHighlights menu={day} query={query} /> : <>
+          {day.priceText && day.priceText !== priceLabel(day)
+            && <p className="menu-source-price">{day.priceText}</p>}
+          <MenuContent menu={day} query={query} />
+        </>
         : !day.stale && <EmptyDayMessage day={day} />}
     </>
   );
@@ -841,13 +870,11 @@ function RestaurantPage({
                   <article className="selected-day">
                     <header className="selected-day-heading">
                       <h2>{formatLongDate(activeDay.serviceDate)}</h2>
-                      <div className="menu-facts">
-                        {activeDay.lunchHours && <span className="hours">{activeDay.lunchHours}</span>}
-                        {activeDay.priceText && <span className="hours">{activeDay.priceText}</span>}
-                      </div>
+                      <LunchFacts menu={activeDay} />
                     </header>
-                    {hasDietaryMarkers(activeDay) && <DietarySafetyNote />}
-                    <DayMenu day={activeDay} source={data.source} />
+                    <LunchInclusions menu={activeDay} />
+                    {activeDay.status === "published" && hasDietaryMarkers(activeDay) && <DietarySafetyNote />}
+                    <DayMenu day={activeDay} source={data.source} query={query} />
                   </article>
 
                   <section className="other-days" aria-labelledby="other-days-title">
@@ -856,14 +883,10 @@ function RestaurantPage({
                       {otherDays.map((day) => (
                         <article className="day-row" key={day.serviceDate}>
                           <header className="day-row-heading">
-                            <span className="day-row-title">
-                              <strong>{formatLongDate(day.serviceDate)}</strong>
-                            </span>
-                            <span className="day-row-facts">
-                              {[day.lunchHours, day.priceText].filter(Boolean).join(" · ")}
-                            </span>
+                            <h3 className="day-row-title">{formatLongDate(day.serviceDate)}</h3>
+                            <LunchFacts menu={day} />
                           </header>
-                          <div className="day-row-body"><DayMenu day={day} source={data.source} /></div>
+                          <div className="day-row-body"><DayMenu day={day} source={data.source} compact query={query} /></div>
                         </article>
                       ))}
                     </div>

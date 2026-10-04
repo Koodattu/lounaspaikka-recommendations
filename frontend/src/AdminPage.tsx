@@ -446,7 +446,7 @@ function AdminDashboard({
           </div>
         </div>
         <p className="admin-calibration-intro">
-          Palaute tallentuu seuraavaa kalibrointia varten eikä muuta julkaistua top 3:a.
+          Palaute tallentuu seuraavaa kalibrointia varten eikä muuta nykyisiä arvioita tai järjestystä.
           Poista palaute painamalla samaa valintaa uudelleen.
         </p>
         <details className="admin-score-help">

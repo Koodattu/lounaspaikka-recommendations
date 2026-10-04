@@ -13,7 +13,7 @@ export interface Restaurant {
 export interface Menu {
   lunchHours: string | null;
   priceText?: string | null;
-  source?: SourceAttribution;
+  source?: SourceAttribution | null;
   status: string;
   structuredMenu: StructuredMenu | null;
   text: string | null;

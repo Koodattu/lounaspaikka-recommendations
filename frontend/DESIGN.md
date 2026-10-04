@@ -251,12 +251,14 @@ Components feel aligned, compact, and touchable. They reuse a small vocabulary a
 
 - **Style:** a quiet header with the local mark, a full-width divider, and no decorative navigation. The date navigator is the primary wayfinding control: one aligned row, 46px arrow targets, a sentence-case context label, and a tabular date.
 - **Daily controls:** the date itself is the page heading; desktop search sits alongside it. Sort and diet controls share the next row with date-picker and sharing actions. Mobile wraps into full-width date/search rows and paired filters, with date-picker and share together. Avoid a duplicate daily title.
-- **Within a restaurant week:** seven named day buttons precede the selected menu. Route Green, an underline, and `aria-pressed` identify the selection. Buttons wrap at narrow widths or enlarged text; the other full menus remain below for comparison.
+- **Within a restaurant week:** seven named day buttons precede the selected full menu. Route Green, an underline, and `aria-pressed` identify the selection. Other days use compact main-course highlights and native full-menu disclosures. Prices and explicit inclusions match the daily view. Buttons and long text wrap at narrow widths or enlarged text.
 - **Return from detail:** the dated return link restores the corresponding visible restaurant heading after the list loads. Its focus outline and native scrolling preserve comparison position without moving focus on ordinary entry or search changes.
 
 ### Recommendation Wayfinder
 
 The daily view ranks every assessed restaurant by score, with unassessed menus after them. Each row uses the same structure: restaurant/address, prominent price and lunch hours; up to three representative main courses; one overall score and its rationale. Show explicit vegetarian/vegan mains and included coffee as concise facts. Side dishes remain in the full-menu disclosure. Whole course names are retained. Price sorting compares the cheapest stated adult lunch, with unknowns last; rank numbers still describe the overall daily score ranking.
+
+When searching menu content, replace the normal highlights with up to three bounded matching excerpts labelled `Hakua vastaavat kohdat`. Emphasize literal search terms with semantic marks; preserve the full source on demand. Restaurant/location-only searches keep main-course highlights. Carry highlighting into the restaurant week without changing its selected full-menu view or the underlying ranking.
 
 The highest-ranked restaurant's rationale uses solid Route Green with Light on Dark text. Its containing row has 24px desktop / 16px mobile horizontal padding, so the rationale never touches the row edges. Other rationales use a simple divider on the page surface. Native disclosures expose full source menus and assessment criteria. Routine freshness appears in the footer; failed updates retain their source-specific warnings. Component scores belong in admin, not in reader rows. Daily navigation targets are 46px; row links and disclosures are at least 44px.
 

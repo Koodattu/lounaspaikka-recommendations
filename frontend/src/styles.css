@@ -288,8 +288,7 @@ h3 {
   gap: 16px;
 }
 
-.rank-badge,
-.hours {
+.rank-badge {
   display: inline-flex;
   min-height: 30px;
   align-items: center;
@@ -303,8 +302,7 @@ h3 {
   white-space: nowrap;
 }
 
-.recommendation-card.rank-1 .rank-badge,
-.recommendation-card.rank-1 .hours {
+.recommendation-card.rank-1 .rank-badge {
   color: #fffaf1;
   border-color: rgba(255, 250, 241, 0.22);
   background: rgba(255, 250, 241, 0.1);
@@ -492,13 +490,6 @@ h3 {
   margin-bottom: 22px;
   color: var(--muted);
   font-size: 0.82rem;
-}
-
-.menu-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
 }
 
 .muted {
@@ -2196,7 +2187,7 @@ body {
 }
 
 .menu-row-restaurant h3,
-.day-row-title strong {
+.day-row-title {
   margin: 0;
   font-family: Aptos, "Segoe UI", sans-serif;
   font-size: 1rem;
@@ -2214,16 +2205,13 @@ body {
 }
 
 .menu-row-restaurant small,
-.day-row-title small,
-.menu-row-facts,
-.day-row-facts {
+.menu-row-facts {
   color: var(--ink);
   font-size: 0.78rem;
   line-height: 1.4;
 }
 
-.menu-row-facts,
-.day-row-facts {
+.menu-row-facts {
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
@@ -2546,6 +2534,11 @@ body {
   border: 0;
 }
 
+.week-main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .week-days {
   display: flex;
   flex-wrap: wrap;
@@ -2625,27 +2618,6 @@ body {
   font-weight: 760;
   letter-spacing: -0.01em;
   text-wrap: auto;
-}
-
-.menu-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  justify-content: flex-end;
-}
-
-.hours {
-  display: inline-flex;
-  min-height: 30px;
-  align-items: center;
-  padding: 5px 9px;
-  border: 1px solid var(--quiet-divider);
-  border-radius: 999px;
-  color: var(--ink);
-  background: var(--field-ground);
-  font-size: 0.74rem;
-  font-weight: 720;
-  white-space: nowrap;
 }
 
 .selected-day > .structured-menu {
@@ -2796,10 +2768,6 @@ body {
 
   .restaurant-actions {
     width: 100%;
-  }
-
-  .menu-facts {
-    justify-content: flex-start;
   }
 
   .menu-row-heading,
@@ -3310,7 +3278,7 @@ body {
   font-size: 0.875rem;
   line-height: 1.4;
 }
-.daily-menu-facts {
+.lunch-facts {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
@@ -3318,7 +3286,7 @@ body {
   margin-top: 12px;
   font-variant-numeric: tabular-nums;
 }
-.daily-menu-facts > span {
+.lunch-facts > span {
   color: var(--muted);
   font-size: 0.875rem;
 }
@@ -3355,6 +3323,17 @@ body {
 .daily-menu-content .course-line,
 .menu-summary { font-size: 1rem; line-height: 1.5; }
 .menu-summary { margin: 4px 0; }
+.menu-search-matches > p {
+  margin: 4px 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.menu-search-matches li { overflow-wrap: anywhere; }
+.reader-main mark {
+  color: var(--ink);
+  background: var(--warning-surface);
+  font-weight: 700;
+}
 .lunch-inclusions {
   display: flex;
   flex-wrap: wrap;
@@ -3383,6 +3362,11 @@ body {
   line-height: 1.65;
 }
 .menu-source-price { margin-block: 4px; font-weight: 650; }
+.selected-day > .lunch-inclusions { margin: 0 0 12px; }
+.selected-day-heading .lunch-facts { margin: 0; }
+.day-row-heading .lunch-facts { margin: 0; }
+.day-row .lunch-price { font-size: 1.125rem; }
+.day-row .lunch-price.is-unknown { font-size: 0.875rem; }
 .menu-assessment {
   align-self: start;
   padding-top: 12px;
@@ -3527,10 +3511,7 @@ main:focus-visible {
 .dietary-safety-note,
 .menu-data-notice,
 .restaurant-meta,
-.day-row-facts,
-.day-row-title small,
 .raw-menu,
-.hours,
 .restaurant-provenance p,
 .source-footer {
   font-size: 0.875rem;

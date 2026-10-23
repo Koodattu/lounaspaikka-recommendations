@@ -61,7 +61,7 @@ The runner records only successful deployments and retries failures. Inspect `jo
 
 ## Local development
 
-Requirements: Node.js 24.15 or newer in the 24.x release line and npm 11.
+Requirements: Node.js 24.22.1 or newer in the 24.x release line and npm 11.
 
 ```sh
 npm install

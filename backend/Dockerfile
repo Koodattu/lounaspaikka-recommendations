@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24.17.0-bookworm-slim AS base
+FROM node:24.22.1-bookworm-slim AS base
 
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
@@ -25,7 +25,7 @@ RUN --mount=type=cache,target=/root/.npm,sharing=locked \
     npm ci --workspace @lounaspaikka/backend --omit=dev \
     --ignore-scripts --no-audit --no-fund
 
-FROM node:24.17.0-alpine3.24 AS runtime
+FROM node:24.22.1-alpine3.24 AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app

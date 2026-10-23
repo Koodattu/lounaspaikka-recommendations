@@ -31,7 +31,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --from=production-dependencies /app/node_modules ./node_modules
-COPY --chmod=644 backend/package.json ./backend/package.json
+COPY --chown=node:node backend/package.json ./backend/package.json
 COPY --from=build /app/backend/dist ./backend/dist
 
 RUN mkdir /data && chown node:node /data

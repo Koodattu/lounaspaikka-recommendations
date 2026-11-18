@@ -61,14 +61,16 @@ The runner records only successful deployments and retries failures. Inspect `jo
 
 ## Local development
 
-Requirements: Node.js 24.22.1 or newer in the 24.x release line and npm 11.
+Requirements: Node.js 26.13.1 or newer in the 26.x release line and npm 11.
 
 ```sh
-npm install
+npm ci --ignore-scripts
 npm test
 npm run typecheck
 npm run build
 ```
+
+This install uses the SQLite binary bundled with `better-sqlite3`. On platforms that require a source build, configure a `node-gyp` toolchain and run `npm ci` with install scripts enabled.
 
 Run the built backend and the Vite frontend in separate terminals:
 

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24.22.1-bookworm-slim AS build
+FROM node:26.13.1-trixie-slim AS build
 
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
@@ -13,7 +13,7 @@ COPY frontend/index.html frontend/tsconfig.json frontend/vite.config.ts frontend
 COPY frontend/src frontend/src
 RUN npm run build --workspace @lounaspaikka/frontend
 
-FROM nginx:1.30.4-alpine-slim AS runtime
+FROM nginx:1.30.6-alpine-slim AS runtime
 
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
